@@ -42,7 +42,7 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
     # پردازش آهنگ‌های قبلی هنگام اجرای اولیه
-    await process_all_topics(int(GROUP_ID))
+    await process_all_topics(GROUP_ID)
     
     await dp.start_polling(bot)
 
