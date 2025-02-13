@@ -1,9 +1,7 @@
-import asyncio
 import os
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import Message
-from aiogram.enums import ChatType
-from aiogram.filters import Command
+import requests
+import asyncio
+import httpx
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
@@ -11,48 +9,76 @@ GROUP_ID = os.getenv("GROUP_ID")
 if not BOT_TOKEN or not GROUP_ID:
     raise ValueError("❌ متغیرهای محیطی BOT_TOKEN و GROUP_ID تنظیم نشده‌اند!")
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
-
-# حالت فعال شدن ربات
+BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 bot_enabled = False
 
-# دریافت پیام‌های قبلی و فوروارد کردن آهنگ‌ها
-async def process_existing_audios(chat_id):
-    try:
-        last_messages = await bot.get_chat(chat_id)
-        last_message_id = last_messages.id  # آخرین پیام در گروه
+# دریافت پیام‌های قدیمی و پردازش آهنگ‌ها
+async def process_existing_audios():
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{BASE_URL}/getUpdates")
+        data = response.json()
 
-        for i in range(last_message_id, last_message_id - 100, -1):  # دریافت آخرین 100 پیام
-            message = await bot.get_messages(chat_id, i)
-            if message and message.audio:
-                sent_message = await message.copy_to(chat_id, message_thread_id=message.message_thread_id)
-                await message.delete()
-    except Exception as e:
-        print(f"⚠️ خطا در پردازش پیام‌های قدیمی: {e}")
+        if data.get("ok"):
+            for update in data["result"]:
+                if "message" in update:
+                    message = update["message"]
+                    if "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
+                        await forward_music(message)
 
-@dp.message(Command("enable"))
-async def enable_bot(message: Message):
+# ارسال پیام جدید به تلگرام
+async def send_message(text):
+    async with httpx.AsyncClient() as client:
+        await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": GROUP_ID, "text": text})
+
+# فوروارد کردن آهنگ‌ها
+async def forward_music(message):
+    message_id = message["message_id"]
+    async with httpx.AsyncClient() as client:
+        await client.get(f"{BASE_URL}/copyMessage", params={
+            "chat_id": GROUP_ID,
+            "from_chat_id": GROUP_ID,
+            "message_id": message_id
+        })
+        await client.get(f"{BASE_URL}/deleteMessage", params={
+            "chat_id": GROUP_ID,
+            "message_id": message_id
+        })
+
+# پردازش دستور `/enable`
+async def enable_bot():
     global bot_enabled
     if not bot_enabled:
         bot_enabled = True
-        await message.reply("✅ ربات فعال شد و شروع به پردازش آهنگ‌های قدیمی کرد!")
-        await process_existing_audios(GROUP_ID)
+        await send_message("✅ ربات فعال شد و پردازش آهنگ‌های قدیمی آغاز شد!")
+        await process_existing_audios()
     else:
-        await message.reply("⚡ ربات قبلاً فعال شده است!")
+        await send_message("⚡ ربات قبلاً فعال شده است!")
 
-@dp.message(lambda msg: msg.audio and msg.chat.type in ["group", "supergroup"])
-async def forward_music(message: Message):
-    if bot_enabled:
-        chat_id = message.chat.id
-        topic_id = message.message_thread_id
+# دریافت پیام‌های جدید و بررسی آهنگ‌ها
+async def check_new_messages():
+    last_update_id = None
 
-        sent_message = await message.copy_to(chat_id, message_thread_id=topic_id)
-        await message.delete()
+    while True:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{BASE_URL}/getUpdates", params={"offset": last_update_id})
+            data = response.json()
 
+            if data.get("ok"):
+                for update in data["result"]:
+                    last_update_id = update["update_id"] + 1
+                    if "message" in update:
+                        message = update["message"]
+                        if "text" in message and message["text"] == "/enable":
+                            await enable_bot()
+                        elif bot_enabled and "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
+                            await forward_music(message)
+
+        await asyncio.sleep(3)  # هر 3 ثانیه چک کن
+
+# اجرای اصلی
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    await send_message("🔄 ربات راه‌اندازی شد، منتظر دستور `/enable` هستم...")
+    await check_new_messages()
 
 if __name__ == "__main__":
     asyncio.run(main())
