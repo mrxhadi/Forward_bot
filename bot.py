@@ -3,8 +3,6 @@ import requests
 import asyncio
 import httpx
 import json
-from datetime import datetime
-import pytz
 import random
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -18,7 +16,6 @@ BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 bot_enabled = True  
 TIMEOUT = 20  
 RESTART_DELAY = 10  
-IRAN_TZ = pytz.timezone("Asia/Tehran")
 
 startup_message_sent = False  
 
@@ -45,6 +42,48 @@ async def send_message(chat_id, text):
         except httpx.ReadTimeout:
             await asyncio.sleep(5)
             await send_message(chat_id, text)
+
+# 📌 **ذخیره آهنگ جدید در دیتابیس**
+def store_song(message, thread_id):
+    audio = message.get("audio", {})
+    title = audio.get("title", "نامشخص").lower()
+    performer = audio.get("performer", "نامشخص").lower()
+    message_id = message["message_id"]
+
+    # اضافه کردن آهنگ جدید
+    song_database.append({
+        "title": title,
+        "performer": performer,
+        "message_id": message_id,
+        "thread_id": thread_id
+    })
+
+    # ذخیره در JSON
+    save_database(song_database)
+
+# 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
+async def forward_music_without_caption(message, thread_id):
+    message_id = message["message_id"]
+    audio_file_id = message["audio"]["file_id"]
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
+            "chat_id": GROUP_ID,
+            "audio": audio_file_id,
+            "message_thread_id": thread_id,
+            "caption": ""  # حذف کپشن از آهنگ
+        })
+        forward_data = forward_response.json()
+
+        if forward_data.get("ok"):
+            await asyncio.sleep(1)
+            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": message_id
+            })
+            delete_data = delete_response.json()
+            if not delete_data.get("ok"):
+                print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
 
 # 📌 **ارسال آهنگ تصادفی به پیوی**
 async def send_random_song(user_id):
@@ -76,15 +115,6 @@ async def send_file_to_user(user_id):
     else:
         await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
 
-# 📌 **ارسال لیست دستورات به پیوی**
-async def send_help_message(user_id):
-    help_text = """📌 **دستورات ربات:**
-🎵 `/random` → دریافت یک آهنگ تصادفی در پیوی  
-📁 `/list` → دریافت فایل لیست آهنگ‌ها  
-❓ `/help` → نمایش این راهنما  
-"""
-    await send_message(user_id, help_text)
-
 # 📌 **دریافت پیام‌های جدید و پردازش دستورات**
 async def check_new_messages():
     last_update_id = None
@@ -113,10 +143,12 @@ async def check_new_messages():
                                 user_id = message["from"]["id"]
                                 await send_random_song(user_id)
 
-                            # 📌 **اگر دستور `/help` فرستاده شد، لیست دستورات به پیوی ارسال شود**
-                            elif text == "/help":
-                                user_id = message["from"]["id"]
-                                await send_help_message(user_id)
+                            # 📌 **اگر آهنگ جدید در گروه ارسال شد، آن را ذخیره و فوروارد کند**
+                            if bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
+                                thread_id = message.get("message_thread_id")
+                                store_song(message, thread_id)
+                                await forward_music_without_caption(message, thread_id)
+                                await asyncio.sleep(1)
 
         except Exception as e:
             print(f"⚠️ خطا در `check_new_messages()`: {e}")
@@ -130,8 +162,7 @@ async def set_bot_commands():
         await client.get(f"{BASE_URL}/setMyCommands", params={
             "commands": json.dumps([
                 {"command": "random", "description": "دریافت آهنگ تصادفی"},
-                {"command": "list", "description": "دریافت لیست آهنگ‌ها"},
-                {"command": "help", "description": "نمایش راهنما"}
+                {"command": "list", "description": "دریافت لیست آهنگ‌ها"}
             ])
         })
 
