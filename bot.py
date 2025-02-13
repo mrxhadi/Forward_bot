@@ -25,7 +25,7 @@ EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
 
 IRAN_TZ = pytz.timezone("Asia/Tehran")
 
-song_tracker = {}  # ذخیره آهنگ‌های ارسال‌شده برای بررسی تکراری‌ها
+song_tracker = {}  
 
 # ارسال پیام به تلگرام
 async def send_message(chat_id, text):
@@ -40,22 +40,25 @@ async def send_message(chat_id, text):
 # دریافت لیست تاپیک‌ها
 async def get_forum_topics():
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getForumTopicList", params={"chat_id": GROUP_ID})
+        response = await client.get(f"{BASE_URL}/getChat", params={"chat_id": GROUP_ID})
         data = response.json()
-        if data.get("ok"):
-            return {topic["message_thread_id"]: topic["name"] for topic in data["result"]["topics"]}
+        if data.get("ok") and "message_thread_id" in data["result"]:
+            return {thread["message_thread_id"]: thread["name"] for thread in data["result"]["message_threads"]}
         return {}
 
 # دریافت پیام‌های یک تاپیک خاص
 async def get_topic_messages(thread_id):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getForumTopicMessages", params={"chat_id": GROUP_ID, "message_thread_id": thread_id})
+        response = await client.get(f"{BASE_URL}/getChatHistory", params={"chat_id": GROUP_ID, "message_thread_id": thread_id, "limit": 100})
         data = response.json()
         if data.get("ok"):
-            return [msg for msg in data["result"]["messages"] if "audio" in msg]
+            messages = [msg for msg in data["result"]["messages"] if "audio" in msg]
+            print(f"📥 دریافت {len(messages)} آهنگ از تاپیک {thread_id}")
+            return messages
+        print(f"⚠️ هیچ آهنگی در تاپیک {thread_id} یافت نشد.")
         return []
 
-# دریافت آهنگ‌های تصادفی برای چت خصوصی بدون نیاز به `chat_id`
+# دریافت آهنگ‌های تصادفی برای چت خصوصی
 async def send_random_songs(chat_id):
     print(f"🎲 دریافت دستور /random از {chat_id}")
 
@@ -66,6 +69,8 @@ async def send_random_songs(chat_id):
         if name not in EXCLUDED_TOPICS_RANDOM:
             messages = await get_topic_messages(thread_id)
             selected_messages.extend(messages)
+
+    print(f"🎶 تعداد کل آهنگ‌های دریافت‌شده: {len(selected_messages)}")
 
     if len(selected_messages) >= RANDOM_SONG_COUNT:
         random_messages = random.sample(selected_messages, RANDOM_SONG_COUNT)
@@ -88,29 +93,6 @@ async def send_random_songs(chat_id):
 
     print(f"✅ سه آهنگ تصادفی برای {chat_id} ارسال شد.")
 
-# پردازش آهنگ‌های جدید و حذف آهنگ‌های تکراری در همان تاپیک
-async def forward_music(message, thread_id):
-    audio = message.get("audio", {})
-    audio_name = audio.get("title", "Unknown")
-    message_id = message["message_id"]
-
-    if thread_id not in song_tracker:
-        song_tracker[thread_id] = {}
-
-    if audio_name in song_tracker[thread_id]:
-        old_message_id = song_tracker[thread_id][audio_name]
-
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
-                "chat_id": GROUP_ID,
-                "message_id": old_message_id
-            })
-            delete_data = delete_response.json()
-            if delete_data.get("ok"):
-                await send_message(GROUP_ID, f"🔄 آهنگ **{audio_name}** در تاپیک `{thread_id}` جایگزین شد!")
-
-    song_tracker[thread_id][audio_name] = message_id  
-
 # بررسی پیام‌های جدید و دستورات
 async def check_new_messages():
     last_update_id = None
@@ -128,14 +110,10 @@ async def check_new_messages():
                             chat_id = message["chat"]["id"]
                             chat_type = message["chat"]["type"]  
                             text = message.get("text", "")
-                            thread_id = message.get("message_thread_id")
 
                             if text == "/random" and chat_type == "private":
                                 await send_random_songs(chat_id)  
 
-                            elif bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
-                                await forward_music(message, thread_id)
-                                await asyncio.sleep(1)
         except Exception as e:
             print(f"⚠️ خطا در `check_new_messages()`: {e}")
             await asyncio.sleep(5)
