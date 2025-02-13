@@ -46,28 +46,44 @@ async def send_message(chat_id, text):
             await asyncio.sleep(5)
             await send_message(chat_id, text)
 
-# 📌 **ذخیره آهنگ جدید در دیتابیس**
-def store_song(message, thread_id):
-    audio = message.get("audio", {})
-    title = audio.get("title", "نامشخص").lower()
-    performer = audio.get("performer", "نامشخص").lower()
-    message_id = message["message_id"]
+# 📌 **ارسال آهنگ تصادفی به پیوی**
+async def send_random_song(user_id):
+    if not song_database:
+        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
+        return
 
-    # چک کن که این آهنگ قبلاً ذخیره نشده باشه
-    for song in song_database:
-        if song["message_id"] == message_id:
-            return
+    song = random.choice(song_database)
+    message_id = song["message_id"]
 
-    # اضافه کردن آهنگ جدید
-    song_database.append({
-        "title": title,
-        "performer": performer,
-        "message_id": message_id,
-        "thread_id": thread_id
-    })
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{BASE_URL}/copyMessage", params={
+            "chat_id": user_id,
+            "from_chat_id": GROUP_ID,
+            "message_id": message_id
+        })
+        data = response.json()
+        if not data.get("ok"):
+            await send_message(user_id, f"⚠️ خطا در ارسال آهنگ: {data['description']}")
 
-    # ذخیره در JSON
-    save_database(song_database)
+# 📌 **ارسال فایل `songs.json` به پیوی**
+async def send_file_to_user(user_id):
+    if os.path.exists(DATABASE_FILE):
+        async with httpx.AsyncClient() as client:
+            with open(DATABASE_FILE, "rb") as file:
+                files = {"document": file}
+                params = {"chat_id": user_id}
+                await client.post(f"{BASE_URL}/sendDocument", params=params, files=files)
+    else:
+        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
+
+# 📌 **ارسال لیست دستورات به پیوی**
+async def send_help_message(user_id):
+    help_text = """📌 **دستورات ربات:**
+🎵 `/random` → دریافت یک آهنگ تصادفی در پیوی  
+📁 `/list` → دریافت فایل لیست آهنگ‌ها  
+❓ `/help` → نمایش این راهنما  
+"""
+    await send_message(user_id, help_text)
 
 # 📌 **دریافت پیام‌های جدید و پردازش دستورات**
 async def check_new_messages():
@@ -102,77 +118,11 @@ async def check_new_messages():
                                 user_id = message["from"]["id"]
                                 await send_help_message(user_id)
 
-                            # 📌 **اگر آهنگ جدید در گروه ارسال شد، آن را ذخیره و فوروارد کند**
-                            if bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
-                                thread_id = message.get("message_thread_id")
-                                store_song(message, thread_id)
-                                await forward_music_without_caption(message, thread_id)
-                                await asyncio.sleep(1)
-
         except Exception as e:
             print(f"⚠️ خطا در `check_new_messages()`: {e}")
             await asyncio.sleep(5)
 
         await asyncio.sleep(3)
-
-# 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
-async def forward_music_without_caption(message, thread_id):
-    message_id = message["message_id"]
-    audio_file_id = message["audio"]["file_id"]
-
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
-            "chat_id": GROUP_ID,
-            "audio": audio_file_id,
-            "message_thread_id": thread_id
-        })
-        forward_data = forward_response.json()
-
-        if forward_data.get("ok"):
-            await asyncio.sleep(1)
-            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
-                "chat_id": GROUP_ID,
-                "message_id": message_id
-            })
-            delete_data = delete_response.json()
-            if not delete_data.get("ok"):
-                print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
-
-# 📌 **ارسال آهنگ تصادفی به پیوی**
-async def send_random_song(user_id):
-    if song_database:
-        song = random.choice(song_database)
-        message_id = song["message_id"]
-        thread_id = song["thread_id"]
-
-        async with httpx.AsyncClient() as client:
-            await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": user_id,
-                "from_chat_id": GROUP_ID,
-                "message_id": message_id
-            })
-    else:
-        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
-
-# 📌 **ارسال فایل `songs.json` به پیوی**
-async def send_file_to_user(user_id):
-    if os.path.exists(DATABASE_FILE):
-        async with httpx.AsyncClient() as client:
-            with open(DATABASE_FILE, "rb") as file:
-                files = {"document": file}
-                params = {"chat_id": user_id}
-                await client.post(f"{BASE_URL}/sendDocument", params=params, files=files)
-    else:
-        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
-
-# 📌 **ارسال لیست دستورات به پیوی**
-async def send_help_message(user_id):
-    help_text = """📌 **دستورات ربات:**
-🎵 `/random` → دریافت یک آهنگ تصادفی در پیوی  
-📁 `/list` → دریافت فایل لیست آهنگ‌ها  
-❓ `/help` → نمایش این راهنما  
-"""
-    await send_message(user_id, help_text)
 
 # 📌 **اضافه کردن دستورات به منوی ربات**
 async def set_bot_commands():
