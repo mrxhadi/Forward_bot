@@ -18,9 +18,10 @@ TIMEOUT = 20  # افزایش زمان تایم‌اوت به 20 ثانیه
 startup_message_sent = False  # جلوگیری از ارسال پیام خوشامدگویی تکراری
 MAX_RETRIES = 3  # تعداد تلاش‌های مجدد برای ارسال پیام
 RANDOM_SONG_COUNT = 3  # تعداد آهنگ‌های تصادفی برای ارسال به 11:11
+RESTART_DELAY = 10  # اگر ربات کرش کند، بعد از ۱۰ ثانیه دوباره راه‌اندازی می‌شود
 
 # لیست تاپیک‌هایی که **فقط برای ارسال تصادفی** نادیده گرفته شوند
-EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]  # اصلاح شد!
+EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
 
 # تنظیم منطقه زمانی ایران
 IRAN_TZ = pytz.timezone("Asia/Tehran")
@@ -43,6 +44,14 @@ async def get_forum_topics():
             return {topic["message_thread_id"]: topic["name"] for topic in data["result"]["topics"]}
         return {}
 
+# پیدا کردن تاپیک "11:11"
+async def get_11_11_topic():
+    topics = await get_forum_topics()
+    for thread_id, name in topics.items():
+        if name == "11:11":
+            return thread_id
+    return None
+
 # دریافت پیام‌های یک تاپیک خاص
 async def get_topic_messages(thread_id):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -52,43 +61,38 @@ async def get_topic_messages(thread_id):
             return [msg for msg in data["result"]["messages"] if "audio" in msg]
         return []
 
-# پیدا کردن تاپیک "11:11"
-async def get_11_11_topic():
-    topics = await get_forum_topics()
-    for thread_id, name in topics.items():
-        if name == "11:11":
-            return thread_id
-    return None
-
 # انتخاب و ارسال ۳ آهنگ شانسی به تاپیک "11:11"
 async def forward_random_music():
-    topics = await get_forum_topics()
-    selected_messages = []
+    try:
+        topics = await get_forum_topics()
+        selected_messages = []
 
-    for thread_id, name in topics.items():
-        if name not in EXCLUDED_TOPICS_RANDOM:  # بررسی فقط برای ارسال تصادفی
-            messages = await get_topic_messages(thread_id)
-            selected_messages.extend(messages)
+        for thread_id, name in topics.items():
+            if name not in EXCLUDED_TOPICS_RANDOM:  
+                messages = await get_topic_messages(thread_id)
+                selected_messages.extend(messages)
 
-    if len(selected_messages) >= RANDOM_SONG_COUNT:
-        random_messages = random.sample(selected_messages, RANDOM_SONG_COUNT)
-    else:
-        random_messages = selected_messages  
+        if len(selected_messages) >= RANDOM_SONG_COUNT:
+            random_messages = random.sample(selected_messages, RANDOM_SONG_COUNT)
+        else:
+            random_messages = selected_messages  
 
-    topic_11_11 = await get_11_11_topic()
-    if not topic_11_11:
-        return  
+        topic_11_11 = await get_11_11_topic()
+        if not topic_11_11:
+            return  
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        for message in random_messages:
-            message_id = message["message_id"]
-            await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": GROUP_ID,
-                "from_chat_id": GROUP_ID,
-                "message_id": message_id,
-                "message_thread_id": topic_11_11
-            })
-            await asyncio.sleep(1)  
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            for message in random_messages:
+                message_id = message["message_id"]
+                await client.get(f"{BASE_URL}/copyMessage", params={
+                    "chat_id": GROUP_ID,
+                    "from_chat_id": GROUP_ID,
+                    "message_id": message_id,
+                    "message_thread_id": topic_11_11
+                })
+                await asyncio.sleep(1)
+    except Exception as e:
+        print(f"⚠️ خطا در `forward_random_music()`: {e}")
 
 # بررسی زمان و اجرای وظایف شبانه
 async def check_time_for_scheduled_task():
@@ -97,15 +101,14 @@ async def check_time_for_scheduled_task():
         if now.hour == 23 and now.minute == 11:  
             await forward_random_music()
             await asyncio.sleep(60)  
-        await asyncio.sleep(10)  
+        await asyncio.sleep(10)
 
 # دریافت پیام‌های جدید و بررسی آهنگ‌ها
 async def check_new_messages():
     last_update_id = None
-
     while True:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            try:
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
                 response = await client.get(f"{BASE_URL}/getUpdates", params={"offset": last_update_id})
                 data = response.json()
 
@@ -118,24 +121,30 @@ async def check_new_messages():
 
                             if bot_enabled and "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
                                 await forward_music(message, thread_id)
-                                await asyncio.sleep(1)  
-
-            except httpx.ReadTimeout:
-                await asyncio.sleep(5)
+                                await asyncio.sleep(1)
+        except Exception as e:
+            print(f"⚠️ خطا در `check_new_messages()`: {e}")
+            await asyncio.sleep(5)
 
         await asyncio.sleep(3)
 
-# اجرای اصلی
+# اجرای اصلی با مکانیسم Restart خودکار
 async def main():
     global startup_message_sent
     if not startup_message_sent:
         await send_message("🔥 I'm Ready, brothers!")
         startup_message_sent = True
 
-    await asyncio.gather(
-        check_new_messages(),
-        check_time_for_scheduled_task()
-    )
+    while True:
+        try:
+            await asyncio.gather(
+                check_new_messages(),
+                check_time_for_scheduled_task()
+            )
+        except Exception as e:
+            print(f"⚠️ کرش غیرمنتظره: {e}")
+            print(f"♻️ ری‌استارت در {RESTART_DELAY} ثانیه...")
+            await asyncio.sleep(RESTART_DELAY)
 
 if __name__ == "__main__":
     asyncio.run(main())
