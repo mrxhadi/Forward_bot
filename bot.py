@@ -4,6 +4,8 @@ import asyncio
 import httpx
 import json
 import random
+from datetime import datetime
+import pytz
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
@@ -16,6 +18,9 @@ BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 bot_enabled = True  
 TIMEOUT = 20  
 RESTART_DELAY = 10  
+IRAN_TZ = pytz.timezone("Asia/Tehran")
+EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
+RANDOM_SONG_COUNT = 3  
 
 startup_message_sent = False  
 
@@ -34,6 +39,16 @@ def save_database(data):
 # **📌 لیست آهنگ‌ها در دیتابیس**
 song_database = load_database()
 
+# 📌 **بررسی آهنگ‌های تکراری**
+def is_duplicate_song(audio, thread_id):
+    title = audio.get("title", "نامشخص").lower()
+    performer = audio.get("performer", "نامشخص").lower()
+    
+    for song in song_database:
+        if song["title"] == title and song["performer"] == performer and song["thread_id"] == thread_id:
+            return True
+    return False
+
 # 📌 **ارسال پیام به تلگرام**
 async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -43,12 +58,22 @@ async def send_message(chat_id, text):
             await asyncio.sleep(5)
             await send_message(chat_id, text)
 
-# 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
+# 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی (اگر تکراری نباشد)**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
-    audio_file_id = message["audio"]["file_id"]
-    audio_title = message["audio"].get("title", "نامشخص").lower()
-    audio_performer = message["audio"].get("performer", "نامشخص").lower()
+    audio = message["audio"]
+
+    if is_duplicate_song(audio, thread_id):
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": message_id
+            })
+        return  # پیام جدید رو فقط حذف کن و ادامه نده
+
+    audio_file_id = audio["file_id"]
+    audio_title = audio.get("title", "نامشخص").lower()
+    audio_performer = audio.get("performer", "نامشخص").lower()
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
@@ -81,94 +106,54 @@ async def forward_music_without_caption(message, thread_id):
             if not delete_data.get("ok"):
                 print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
 
-# 📌 **ارسال آهنگ تصادفی به پیوی**
-async def send_random_song(user_id):
-    if not song_database:
-        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
-        return
-
-    song = random.choice(song_database)
-    message_id = song["message_id"]
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BASE_URL}/copyMessage", params={
-            "chat_id": user_id,
-            "from_chat_id": GROUP_ID,
-            "message_id": message_id
-        })
+# 📌 **پیدا کردن تاپیک `11:11`**
+async def get_11_11_topic():
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        response = await client.get(f"{BASE_URL}/getForumTopicList", params={"chat_id": GROUP_ID})
         data = response.json()
-        if not data.get("ok"):
-            await send_message(user_id, f"⚠️ خطا در ارسال آهنگ: {data['description']}")
+        if data.get("ok"):
+            for topic in data["result"]["topics"]:
+                if topic["name"] == "11:11":
+                    return topic["message_thread_id"]
+    return None
 
-# 📌 **ارسال فایل `songs.json` به پیوی**
-async def send_file_to_user(user_id):
-    if os.path.exists(DATABASE_FILE):
-        async with httpx.AsyncClient() as client:
-            with open(DATABASE_FILE, "rb") as file:
-                files = {"document": file}
-                params = {"chat_id": user_id}
-                await client.post(f"{BASE_URL}/sendDocument", params=params, files=files)
-    else:
-        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
-
-# 📌 **دریافت پیام‌های جدید و پردازش دستورات**
-async def check_new_messages():
-    last_update_id = None
+# 📌 **ارسال سه آهنگ تصادفی به تاپیک `11:11` هر شب ساعت 11:11**
+async def send_nightly_random_songs():
     while True:
-        try:
+        now = datetime.now(IRAN_TZ)
+        if now.hour == 23 and now.minute == 11:  # 11:11 PM به وقت ایران
+            topic_11_11 = await get_11_11_topic()
+            if not topic_11_11:
+                return
+
+            valid_songs = [song for song in song_database if song["thread_id"] not in EXCLUDED_TOPICS_RANDOM]
+            if not valid_songs:
+                return
+
+            selected_songs = random.sample(valid_songs, min(RANDOM_SONG_COUNT, len(valid_songs)))
+
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-                response = await client.get(f"{BASE_URL}/getUpdates", params={"offset": last_update_id})
-                data = response.json()
+                for song in selected_songs:
+                    await client.get(f"{BASE_URL}/copyMessage", params={
+                        "chat_id": GROUP_ID,
+                        "from_chat_id": GROUP_ID,
+                        "message_id": song["message_id"],
+                        "message_thread_id": topic_11_11
+                    })
+            await asyncio.sleep(60)  # جلوگیری از ارسال چندباره در همان دقیقه
 
-                if data.get("ok"):
-                    for update in data["result"]:
-                        last_update_id = update["update_id"] + 1
-                        if "message" in update:
-                            message = update["message"]
-                            chat_id = message["chat"]["id"]
-                            text = message.get("text", "").strip()
-
-                            # 📌 **اگر دستور `/list` فرستاده شد، فایل را به پیوی کاربر ارسال کند**
-                            if text == "/list":
-                                user_id = message["from"]["id"]
-                                await send_message(chat_id, "📩 فایل به پیوی شما ارسال شد.")
-                                await send_file_to_user(user_id)
-
-                            # 📌 **اگر دستور `/random` فرستاده شد، آهنگ تصادفی به پیوی کاربر ارسال کند**
-                            elif text == "/random":
-                                user_id = message["from"]["id"]
-                                await send_random_song(user_id)
-
-                            # 📌 **اگر آهنگ جدید در گروه ارسال شد، آن را ذخیره و فوروارد کند**
-                            if bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
-                                thread_id = message.get("message_thread_id")
-                                await forward_music_without_caption(message, thread_id)
-                                await asyncio.sleep(1)
-
-        except Exception as e:
-            print(f"⚠️ خطا در `check_new_messages()`: {e}")
-            await asyncio.sleep(5)
-
-        await asyncio.sleep(3)
-
-# 📌 **اضافه کردن دستورات به منوی ربات**
-async def set_bot_commands():
-    async with httpx.AsyncClient() as client:
-        await client.get(f"{BASE_URL}/setMyCommands", params={
-            "commands": json.dumps([
-                {"command": "random", "description": "دریافت آهنگ تصادفی"},
-                {"command": "list", "description": "دریافت لیست آهنگ‌ها"}
-            ])
-        })
+        await asyncio.sleep(10)
 
 # 📌 **اجرای اصلی**
 async def main():
-    await set_bot_commands()
     await send_message(GROUP_ID, "🔥 I'm Ready, brothers!")
 
     while True:
         try:
-            await asyncio.gather(check_new_messages())
+            await asyncio.gather(
+                check_new_messages(),
+                send_nightly_random_songs()
+            )
         except Exception as e:
             print(f"⚠️ کرش غیرمنتظره: {e}")
             await asyncio.sleep(RESTART_DELAY)
