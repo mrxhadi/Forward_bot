@@ -1,9 +1,8 @@
 import os
-import requests
-import asyncio
-import httpx
 import json
 import random
+import asyncio
+import httpx
 from datetime import datetime
 import pytz
 
@@ -15,14 +14,11 @@ if not BOT_TOKEN or not GROUP_ID:
     raise ValueError("❌ متغیرهای محیطی BOT_TOKEN و GROUP_ID تنظیم نشده‌اند!")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-bot_enabled = True  
 TIMEOUT = 20  
 RESTART_DELAY = 10  
 IRAN_TZ = pytz.timezone("Asia/Tehran")
 EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
 RANDOM_SONG_COUNT = 3  
-
-startup_message_sent = False  
 
 # 📌 **لود کردن دیتابیس از JSON**
 def load_database():
@@ -36,74 +32,66 @@ def save_database(data):
     with open(DATABASE_FILE, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
 
-# **📌 لیست آهنگ‌ها در دیتابیس**
 song_database = load_database()
-
-# 📌 **بررسی آهنگ‌های تکراری**
-def is_duplicate_song(audio, thread_id):
-    title = audio.get("title", "نامشخص").lower()
-    performer = audio.get("performer", "نامشخص").lower()
-    
-    for song in song_database:
-        if song["title"] == title and song["performer"] == performer and song["thread_id"] == thread_id:
-            return True
-    return False
 
 # 📌 **ارسال پیام به تلگرام**
 async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        try:
-            await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": chat_id, "text": text})
-        except httpx.ReadTimeout:
-            await asyncio.sleep(5)
-            await send_message(chat_id, text)
+        await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": chat_id, "text": text})
 
-# 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی (اگر تکراری نباشد)**
+# 📌 **دریافت `songs.json` از پیوی و ذخیره در دیتابیس**
+async def handle_document(document, chat_id):
+    global song_database  
+    file_id = document["file_id"]  
+
+    async with httpx.AsyncClient() as client:
+        file_info = await client.get(f"{BASE_URL}/getFile", params={"file_id": file_id})
+        file_info_data = file_info.json()
+
+        if not file_info_data.get("ok"):
+            await send_message(chat_id, "❌ خطا در دریافت فایل از سرور تلگرام!")
+            return
+
+        file_path = file_info_data["result"]["file_path"]
+        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+
+        response = await client.get(file_url)
+        with open(DATABASE_FILE, "wb") as file:
+            file.write(response.content)
+
+    song_database = load_database()  
+    await send_message(chat_id, f"✅ دیتابیس آپدیت شد! تعداد آهنگ‌ها: {len(song_database)}")
+
+# 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
     audio = message["audio"]
-
-    if is_duplicate_song(audio, thread_id):
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            await client.get(f"{BASE_URL}/deleteMessage", params={
-                "chat_id": GROUP_ID,
-                "message_id": message_id
-            })
-        return  # پیام جدید رو فقط حذف کن و ادامه نده
-
     audio_file_id = audio["file_id"]
-    audio_title = audio.get("title", "نامشخص").lower()
-    audio_performer = audio.get("performer", "نامشخص").lower()
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
             "chat_id": GROUP_ID,
             "audio": audio_file_id,
             "message_thread_id": thread_id,
-            "caption": ""  # حذف کپشن از آهنگ
+            "caption": ""  
         })
         forward_data = forward_response.json()
 
         if forward_data.get("ok"):
             new_message_id = forward_data["result"]["message_id"]
-
-            # ذخیره پیام جدید در دیتابیس
             song_database.append({
-                "title": audio_title,
-                "performer": audio_performer,
                 "message_id": new_message_id,
                 "thread_id": thread_id
             })
             save_database(song_database)
 
-            # حذف پیام اصلی
             await asyncio.sleep(1)
             await client.get(f"{BASE_URL}/deleteMessage", params={
                 "chat_id": GROUP_ID,
                 "message_id": message_id
             })
 
-# 📌 **ارسال سه آهنگ تصادفی به پیوی**
+# 📌 **ارسال ۳ آهنگ تصادفی به پیوی**
 async def send_random_song(user_id):
     if not song_database:
         await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
@@ -151,6 +139,10 @@ async def check_new_messages():
                                 await send_random_song(chat_id)
                             elif text == "/help":
                                 await send_message(chat_id, "📌 **دستورات:**\n🎵 `/random` → دریافت ۳ آهنگ تصادفی\n📁 `/list` → دریافت لیست آهنگ‌ها\n❓ `/help` → نمایش راهنما")
+
+                            # دریافت دیتابیس از پیوی
+                            if "document" in message and message["document"]["file_name"] == "songs.json":
+                                await handle_document(message["document"], chat_id)
 
                             if "audio" in message and str(chat_id) == GROUP_ID:
                                 await forward_music_without_caption(message, message.get("message_thread_id"))
