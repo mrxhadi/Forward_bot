@@ -19,7 +19,9 @@ bot_enabled = True
 TIMEOUT = 20  
 RESTART_DELAY = 10  
 IRAN_TZ = pytz.timezone("Asia/Tehran")
+
 EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
+EXCLUDED_TOPICS_PROCESSING = ["Database"]  # این تاپیک رو ربات پردازش نمی‌کنه
 RANDOM_SONG_COUNT = 3  
 
 startup_message_sent = False  
@@ -60,6 +62,9 @@ async def send_message(chat_id, text):
 
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی (اگر تکراری نباشد)**
 async def forward_music_without_caption(message, thread_id):
+    if thread_id in EXCLUDED_TOPICS_PROCESSING:
+        return  # آهنگ‌های تاپیک Database پردازش نمی‌شن
+
     message_id = message["message_id"]
     audio = message["audio"]
 
@@ -103,31 +108,6 @@ async def forward_music_without_caption(message, thread_id):
                 "message_id": message_id
             })
 
-# 📌 **ارسال سه آهنگ تصادفی به پیوی**
-async def send_random_song(user_id):
-    if not song_database:
-        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
-        return
-
-    songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
-
-    async with httpx.AsyncClient() as client:
-        for song in songs:
-            await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": user_id,
-                "from_chat_id": GROUP_ID,
-                "message_id": song["message_id"]
-            })
-
-# 📌 **ارسال فایل `songs.json` به پیوی**
-async def send_file_to_user(user_id):
-    if os.path.exists(DATABASE_FILE):
-        async with httpx.AsyncClient() as client:
-            with open(DATABASE_FILE, "rb") as file:
-                await client.post(f"{BASE_URL}/sendDocument", params={"chat_id": user_id}, files={"document": file})
-    else:
-        await send_message(user_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
-
 # 📌 **دریافت و پردازش پیام‌های جدید**
 async def check_new_messages():
     last_update_id = None
@@ -143,17 +123,10 @@ async def check_new_messages():
                         if "message" in update:
                             message = update["message"]
                             chat_id = message["chat"]["id"]
-                            text = message.get("text", "").strip()
-
-                            if text == "/list":
-                                await send_file_to_user(chat_id)
-                            elif text == "/random":
-                                await send_random_song(chat_id)
-                            elif text == "/help":
-                                await send_message(chat_id, "📌 **دستورات:**\n🎵 `/random` → دریافت ۳ آهنگ تصادفی\n📁 `/list` → دریافت لیست آهنگ‌ها\n❓ `/help` → نمایش راهنما")
+                            thread_id = message.get("message_thread_id")
 
                             if "audio" in message and str(chat_id) == GROUP_ID:
-                                await forward_music_without_caption(message, message.get("message_thread_id"))
+                                await forward_music_without_caption(message, thread_id)
 
         except Exception as e:
             print(f"⚠️ خطا: {e}")
