@@ -27,7 +27,7 @@ IRAN_TZ = pytz.timezone("Asia/Tehran")
 
 song_tracker = {}  # ذخیره آهنگ‌های ارسال‌شده برای بررسی تکراری‌ها
 
-# ارسال پیام جدید به تلگرام
+# ارسال پیام به تلگرام
 async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         params = {"chat_id": chat_id, "text": text}
@@ -55,8 +55,10 @@ async def get_topic_messages(thread_id):
             return [msg for msg in data["result"]["messages"] if "audio" in msg]
         return []
 
-# دریافت آهنگ‌های تصادفی برای چت خصوصی
+# دریافت آهنگ‌های تصادفی برای چت خصوصی بدون نیاز به `chat_id`
 async def send_random_songs(chat_id):
+    print(f"🎲 دریافت دستور /random از {chat_id}")
+
     topics = await get_forum_topics()
     selected_messages = []
 
@@ -70,6 +72,10 @@ async def send_random_songs(chat_id):
     else:
         random_messages = selected_messages  
 
+    if not random_messages:
+        await send_message(chat_id, "⚠️ متأسفم، هیچ آهنگی برای ارسال پیدا نشد!")
+        return
+
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         for message in random_messages:
             message_id = message["message_id"]
@@ -78,7 +84,9 @@ async def send_random_songs(chat_id):
                 "from_chat_id": GROUP_ID,
                 "message_id": message_id
             })
-            await asyncio.sleep(1)  
+            await asyncio.sleep(1)
+
+    print(f"✅ سه آهنگ تصادفی برای {chat_id} ارسال شد.")
 
 # پردازش آهنگ‌های جدید و حذف آهنگ‌های تکراری در همان تاپیک
 async def forward_music(message, thread_id):
@@ -99,9 +107,7 @@ async def forward_music(message, thread_id):
             })
             delete_data = delete_response.json()
             if delete_data.get("ok"):
-                general_topic_id = await get_general_topic()
-                if general_topic_id:
-                    await send_message(GROUP_ID, f"🔄 آهنگ **{audio_name}** در تاپیک `{thread_id}` جایگزین شد!")
+                await send_message(GROUP_ID, f"🔄 آهنگ **{audio_name}** در تاپیک `{thread_id}` جایگزین شد!")
 
     song_tracker[thread_id][audio_name] = message_id  
 
@@ -120,11 +126,12 @@ async def check_new_messages():
                         if "message" in update:
                             message = update["message"]
                             chat_id = message["chat"]["id"]
+                            chat_type = message["chat"]["type"]  
                             text = message.get("text", "")
                             thread_id = message.get("message_thread_id")
 
-                            if text == "/random" and chat_id != GROUP_ID:
-                                await send_random_songs(chat_id)  # ارسال آهنگ‌های تصادفی در چت خصوصی
+                            if text == "/random" and chat_type == "private":
+                                await send_random_songs(chat_id)  
 
                             elif bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
                                 await forward_music(message, thread_id)
