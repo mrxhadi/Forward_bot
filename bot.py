@@ -13,12 +13,15 @@ if not BOT_TOKEN or not GROUP_ID:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# دریافت پیام‌های قدیمی و فوروارد کردن آهنگ‌ها
+# دریافت پیام‌های قبلی و فوروارد کردن آهنگ‌ها
 async def process_existing_audios(chat_id):
-    async for message in bot.iter_messages(chat_id, limit=100):  # دریافت آخرین 100 پیام
-        if message.audio:
-            sent_message = await message.copy_to(chat_id, message_thread_id=message.message_thread_id)
-            await message.delete()
+    await bot.send_chat_action(chat_id, "typing")  # اطمینان از دسترسی به گروه
+    updates = await bot.get_updates()  # دریافت آخرین پیام‌های گروه
+
+    for update in updates:
+        if update.message and update.message.chat.id == int(chat_id) and update.message.audio:
+            sent_message = await update.message.copy_to(chat_id, message_thread_id=update.message.message_thread_id)
+            await update.message.delete()
 
 @dp.message(lambda msg: msg.audio and msg.chat.type in ["group", "supergroup"])
 async def forward_music(message: Message):
@@ -31,7 +34,7 @@ async def forward_music(message: Message):
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
 
-    # اجرای پردازش پیام‌های قدیمی هنگام راه‌اندازی اولیه
+    # دریافت و پردازش پیام‌های قدیمی
     await process_existing_audios(GROUP_ID)
     
     await dp.start_polling(bot)
