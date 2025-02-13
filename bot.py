@@ -17,13 +17,19 @@ dp = Dispatcher()
 # حالت فعال شدن ربات
 bot_enabled = False
 
-# دریافت پیام‌های قدیمی و فوروارد کردن آهنگ‌ها
+# دریافت پیام‌های قبلی و فوروارد کردن آهنگ‌ها
 async def process_existing_audios(chat_id):
-    messages = await bot.get_chat_history(chat_id, limit=100)  # دریافت آخرین 100 پیام
-    for message in messages:
-        if message.audio:
-            sent_message = await message.copy_to(chat_id, message_thread_id=message.message_thread_id)
-            await message.delete()
+    try:
+        last_messages = await bot.get_chat(chat_id)
+        last_message_id = last_messages.id  # آخرین پیام در گروه
+
+        for i in range(last_message_id, last_message_id - 100, -1):  # دریافت آخرین 100 پیام
+            message = await bot.get_messages(chat_id, i)
+            if message and message.audio:
+                sent_message = await message.copy_to(chat_id, message_thread_id=message.message_thread_id)
+                await message.delete()
+    except Exception as e:
+        print(f"⚠️ خطا در پردازش پیام‌های قدیمی: {e}")
 
 @dp.message(Command("enable"))
 async def enable_bot(message: Message):
