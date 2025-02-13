@@ -80,7 +80,7 @@ async def check_new_messages():
 
 # اجرای اصلی
 async def main():
-    await send_message("🔄 ربات راه‌اندازی شد و در حال پردازش آهنگ‌های جدید است...")
+    await send_message("I'm Ready brothers!")
     await check_new_messages()
 
 if __name__ == "__main__":
