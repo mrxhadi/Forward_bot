@@ -37,6 +37,37 @@ async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": chat_id, "text": text})
 
+# 📌 **دریافت و ذخیره `songs.json` از پیوی**
+async def handle_document(document, chat_id):
+    global song_database  
+    file_name = document["file_name"]
+    
+    if file_name != "songs.json":
+        await send_message(chat_id, "⚠️ این فایل پشتیبانی نمی‌شود! لطفاً `songs.json` ارسال کنید.")
+        return
+
+    file_id = document["file_id"]
+    print(f"📥 دریافت فایل `{file_name}` از {chat_id}")
+
+    async with httpx.AsyncClient() as client:
+        file_info = await client.get(f"{BASE_URL}/getFile", params={"file_id": file_id})
+        file_info_data = file_info.json()
+
+        if not file_info_data.get("ok"):
+            await send_message(chat_id, "❌ خطا در دریافت فایل از سرور تلگرام!")
+            return
+
+        file_path = file_info_data["result"]["file_path"]
+        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+
+        response = await client.get(file_url)
+        with open(DATABASE_FILE, "wb") as file:
+            file.write(response.content)
+
+    song_database = load_database()  
+    print(f"✅ دیتابیس آپدیت شد! تعداد آهنگ‌ها: {len(song_database)}")
+    await send_message(chat_id, f"✅ دیتابیس آپدیت شد! تعداد آهنگ‌ها: {len(song_database)}")
+
 # 📌 **ارسال ۳ آهنگ تصادفی به پیوی**
 async def send_random_song(chat_id):
     global song_database
@@ -47,7 +78,7 @@ async def send_random_song(chat_id):
 
     songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient() as client:
         for song in songs:
             response = await client.get(f"{BASE_URL}/copyMessage", params={
                 "chat_id": chat_id,
@@ -77,8 +108,12 @@ async def check_new_messages():
                             chat_id = message["chat"]["id"]
                             text = message.get("text", "").strip()
 
+                            # 📌 **دریافت و ذخیره `songs.json`**
+                            if "document" in message:
+                                await handle_document(message["document"], chat_id)
+
                             # 📌 **دستورات ربات**
-                            if text == "/start":
+                            elif text == "/start":
                                 await send_message(chat_id, "🎵 خوش آمدید! از منوی دستورات استفاده کنید: `/random`, `/list`, `/help`")
                             elif text == "/list":
                                 await send_file_to_user(chat_id)
