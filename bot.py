@@ -22,6 +22,9 @@ GENERAL_TOPIC_NAME = "General"
 EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
 IRAN_TZ = pytz.timezone("Asia/Tehran")
 
+# مقداردهی اولیه برای جلوگیری از خطای "not defined"
+startup_message_sent = False  
+
 # ارسال پیام به تلگرام
 async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
