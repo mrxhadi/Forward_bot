@@ -14,25 +14,30 @@ bot_enabled = False
 
 # دریافت پیام‌های قدیمی و پردازش آهنگ‌ها
 async def process_existing_audios():
+    print("🔍 در حال دریافت پیام‌های قدیمی...")
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/getUpdates")
         data = response.json()
+        print(f"📩 پیام‌های دریافتی: {data}")  # **لاگ اضافه شد**
 
         if data.get("ok"):
             for update in data["result"]:
                 if "message" in update:
                     message = update["message"]
                     if "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
+                        print(f"🎵 پیدا شد: آهنگ در {GROUP_ID}, پیام {message['message_id']}")
                         await forward_music(message)
 
 # ارسال پیام جدید به تلگرام
 async def send_message(text):
+    print(f"📢 ارسال پیام: {text}")  # **لاگ اضافه شد**
     async with httpx.AsyncClient() as client:
         await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": GROUP_ID, "text": text})
 
 # فوروارد کردن آهنگ‌ها
 async def forward_music(message):
     message_id = message["message_id"]
+    print(f"🔄 در حال فوروارد آهنگ {message_id}...")
     async with httpx.AsyncClient() as client:
         await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": GROUP_ID,
@@ -43,6 +48,7 @@ async def forward_music(message):
             "chat_id": GROUP_ID,
             "message_id": message_id
         })
+    print(f"✅ آهنگ {message_id} فوروارد و حذف شد!")
 
 # پردازش دستور `/enable`
 async def enable_bot():
@@ -62,6 +68,7 @@ async def check_new_messages():
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{BASE_URL}/getUpdates", params={"offset": last_update_id})
             data = response.json()
+            print(f"🔄 بررسی پیام‌های جدید: {data}")  # **لاگ اضافه شد**
 
             if data.get("ok"):
                 for update in data["result"]:
