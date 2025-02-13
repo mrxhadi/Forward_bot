@@ -44,14 +44,6 @@ async def get_forum_topics():
             return {topic["message_thread_id"]: topic["name"] for topic in data["result"]["topics"]}
         return {}
 
-# پیدا کردن تاپیک "11:11"
-async def get_11_11_topic():
-    topics = await get_forum_topics()
-    for thread_id, name in topics.items():
-        if name == "11:11":
-            return thread_id
-    return None
-
 # دریافت پیام‌های یک تاپیک خاص
 async def get_topic_messages(thread_id):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -60,6 +52,56 @@ async def get_topic_messages(thread_id):
         if data.get("ok"):
             return [msg for msg in data["result"]["messages"] if "audio" in msg]
         return []
+
+# پیدا کردن تاپیک "11:11"
+async def get_11_11_topic():
+    topics = await get_forum_topics()
+    for thread_id, name in topics.items():
+        if name == "11:11":
+            return thread_id
+    return None
+
+# فوروارد کردن آهنگ‌های جدید
+async def forward_music(message, thread_id):
+    message_id = message["message_id"]
+    has_caption = "caption" in message
+    forwarded_message = None  
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        for attempt in range(MAX_RETRIES):
+            try:
+                if has_caption:
+                    response = await client.get(f"{BASE_URL}/sendAudio", params={
+                        "chat_id": GROUP_ID,
+                        "audio": message["audio"]["file_id"],
+                        "message_thread_id": thread_id
+                    })
+                else:
+                    response = await client.get(f"{BASE_URL}/copyMessage", params={
+                        "chat_id": GROUP_ID,
+                        "from_chat_id": GROUP_ID,
+                        "message_id": message_id,
+                        "message_thread_id": thread_id
+                    })
+
+                response_data = response.json()
+                if response_data.get("ok"):
+                    forwarded_message = response_data["result"]["message_id"]
+                    break  
+                else:
+                    await asyncio.sleep(2)  
+            except httpx.ReadTimeout:
+                await asyncio.sleep(5)
+
+        if forwarded_message:
+            await asyncio.sleep(1)  
+            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": message_id
+            })
+            delete_data = delete_response.json()
+            if not delete_data.get("ok"):  
+                print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
 
 # انتخاب و ارسال ۳ آهنگ شانسی به تاپیک "11:11"
 async def forward_random_music():
@@ -90,7 +132,7 @@ async def forward_random_music():
                     "message_id": message_id,
                     "message_thread_id": topic_11_11
                 })
-                await asyncio.sleep(1)
+                await asyncio.sleep(1)  
     except Exception as e:
         print(f"⚠️ خطا در `forward_random_music()`: {e}")
 
@@ -101,7 +143,7 @@ async def check_time_for_scheduled_task():
         if now.hour == 23 and now.minute == 11:  
             await forward_random_music()
             await asyncio.sleep(60)  
-        await asyncio.sleep(10)
+        await asyncio.sleep(10)  
 
 # دریافت پیام‌های جدید و بررسی آهنگ‌ها
 async def check_new_messages():
