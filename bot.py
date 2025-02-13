@@ -40,19 +40,30 @@ async def send_message(chat_id, text):
 # دریافت لیست تاپیک‌ها
 async def get_forum_topics():
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getChat", params={"chat_id": GROUP_ID})
+        response = await client.get(f"{BASE_URL}/getUpdates", params={"allowed_updates": ["message"]})
         data = response.json()
-        if data.get("ok") and "message_thread_id" in data["result"]:
-            return {thread["message_thread_id"]: thread["name"] for thread in data["result"]["message_threads"]}
+        if data.get("ok"):
+            topics = {}
+            for update in data["result"]:
+                if "message" in update and "message_thread_id" in update["message"]:
+                    thread_id = update["message"]["message_thread_id"]
+                    thread_name = update["message"]["chat"]["title"]
+                    topics[thread_id] = thread_name
+            print(f"📌 دریافت {len(topics)} تاپیک.")
+            return topics
         return {}
 
 # دریافت پیام‌های یک تاپیک خاص
 async def get_topic_messages(thread_id):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getChatHistory", params={"chat_id": GROUP_ID, "message_thread_id": thread_id, "limit": 100})
+        response = await client.get(f"{BASE_URL}/getUpdates", params={"allowed_updates": ["message"]})
         data = response.json()
         if data.get("ok"):
-            messages = [msg for msg in data["result"]["messages"] if "audio" in msg]
+            messages = []
+            for update in data["result"]:
+                if "message" in update and update["message"].get("message_thread_id") == thread_id:
+                    if "audio" in update["message"]:
+                        messages.append(update["message"])
             print(f"📥 دریافت {len(messages)} آهنگ از تاپیک {thread_id}")
             return messages
         print(f"⚠️ هیچ آهنگی در تاپیک {thread_id} یافت نشد.")
