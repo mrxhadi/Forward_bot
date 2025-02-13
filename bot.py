@@ -12,19 +12,32 @@ if not BOT_TOKEN or not GROUP_ID:
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 bot_enabled = False
 
-# دریافت پیام‌های قدیمی و پردازش آهنگ‌ها
+# دریافت لیست تاپیک‌ها و پردازش پیام‌های قدیمی در هر تاپیک
 async def process_existing_audios():
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BASE_URL}/getUpdates")
+        # دریافت لیست تاپیک‌های گروه
+        response = await client.get(f"{BASE_URL}/getForumTopicList", params={"chat_id": GROUP_ID})
         data = response.json()
 
         if data.get("ok"):
-            for update in data["result"]:
-                if "message" in update:
-                    message = update["message"]
-                    if "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
-                        thread_id = message.get("message_thread_id")  # گرفتن تاپیک آیدی
-                        await forward_music(message, thread_id)
+            for topic in data["result"]["topics"]:
+                topic_id = topic["message_thread_id"]
+                print(f"📌 بررسی تاپیک: {topic_id}")
+
+                # دریافت پیام‌های داخل تاپیک
+                await process_topic_messages(topic_id)
+
+# دریافت پیام‌های قدیمی داخل هر تاپیک
+async def process_topic_messages(thread_id):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{BASE_URL}/getForumTopicMessages", params={"chat_id": GROUP_ID, "message_thread_id": thread_id})
+        data = response.json()
+
+        if data.get("ok"):
+            for message in data["result"]["messages"]:
+                if "audio" in message:
+                    print(f"🎵 پیدا شد: آهنگ در تاپیک {thread_id}, پیام {message['message_id']}")
+                    await forward_music(message, thread_id)
 
 # ارسال پیام جدید به تلگرام
 async def send_message(text):
@@ -39,7 +52,7 @@ async def forward_music(message, thread_id):
             "chat_id": GROUP_ID,
             "from_chat_id": GROUP_ID,
             "message_id": message_id,
-            "message_thread_id": thread_id  # ارسال در همان تاپیک
+            "message_thread_id": thread_id
         })
         await client.get(f"{BASE_URL}/deleteMessage", params={
             "chat_id": GROUP_ID,
@@ -70,7 +83,7 @@ async def check_new_messages():
                     last_update_id = update["update_id"] + 1
                     if "message" in update:
                         message = update["message"]
-                        thread_id = message.get("message_thread_id")  # گرفتن آیدی تاپیک
+                        thread_id = message.get("message_thread_id")
 
                         if "text" in message and message["text"] == "/enable":
                             await enable_bot()
