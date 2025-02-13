@@ -13,27 +13,29 @@ if not BOT_TOKEN or not GROUP_ID:
     raise ValueError("❌ متغیرهای محیطی BOT_TOKEN و GROUP_ID تنظیم نشده‌اند!")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-bot_enabled = True  # ربات همیشه فعال باشد
-TIMEOUT = 20  # افزایش زمان تایم‌اوت به 20 ثانیه
-startup_message_sent = False  # جلوگیری از ارسال پیام خوشامدگویی تکراری
-MAX_RETRIES = 3  # تعداد تلاش‌های مجدد برای ارسال پیام
-RANDOM_SONG_COUNT = 3  # تعداد آهنگ‌های تصادفی برای ارسال به 11:11
-RESTART_DELAY = 10  # اگر ربات کرش کند، بعد از ۱۰ ثانیه دوباره راه‌اندازی می‌شود
+bot_enabled = True  
+TIMEOUT = 20  
+startup_message_sent = False  
+MAX_RETRIES = 3  
+RANDOM_SONG_COUNT = 3  
+RESTART_DELAY = 10  
+GENERAL_TOPIC_NAME = "General"  
 
-# لیست تاپیک‌هایی که **فقط برای ارسال تصادفی** نادیده گرفته شوند
 EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
 
-# تنظیم منطقه زمانی ایران
 IRAN_TZ = pytz.timezone("Asia/Tehran")
 
+song_tracker = {}  # ذخیره آهنگ‌های ارسال‌شده برای بررسی تکراری‌ها
+
 # ارسال پیام جدید به تلگرام
-async def send_message(text):
+async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        params = {"chat_id": chat_id, "text": text}
         try:
-            await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": GROUP_ID, "text": text})
+            await client.get(f"{BASE_URL}/sendMessage", params=params)
         except httpx.ReadTimeout:
             await asyncio.sleep(5)
-            await send_message(text)
+            await send_message(chat_id, text)
 
 # دریافت لیست تاپیک‌ها
 async def get_forum_topics():
@@ -53,99 +55,57 @@ async def get_topic_messages(thread_id):
             return [msg for msg in data["result"]["messages"] if "audio" in msg]
         return []
 
-# پیدا کردن تاپیک "11:11"
-async def get_11_11_topic():
+# دریافت آهنگ‌های تصادفی برای چت خصوصی
+async def send_random_songs(chat_id):
     topics = await get_forum_topics()
-    for thread_id, name in topics.items():
-        if name == "11:11":
-            return thread_id
-    return None
+    selected_messages = []
 
-# فوروارد کردن آهنگ‌های جدید
-async def forward_music(message, thread_id):
-    message_id = message["message_id"]
-    has_caption = "caption" in message
-    forwarded_message = None  
+    for thread_id, name in topics.items():
+        if name not in EXCLUDED_TOPICS_RANDOM:
+            messages = await get_topic_messages(thread_id)
+            selected_messages.extend(messages)
+
+    if len(selected_messages) >= RANDOM_SONG_COUNT:
+        random_messages = random.sample(selected_messages, RANDOM_SONG_COUNT)
+    else:
+        random_messages = selected_messages  
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        for attempt in range(MAX_RETRIES):
-            try:
-                if has_caption:
-                    response = await client.get(f"{BASE_URL}/sendAudio", params={
-                        "chat_id": GROUP_ID,
-                        "audio": message["audio"]["file_id"],
-                        "message_thread_id": thread_id
-                    })
-                else:
-                    response = await client.get(f"{BASE_URL}/copyMessage", params={
-                        "chat_id": GROUP_ID,
-                        "from_chat_id": GROUP_ID,
-                        "message_id": message_id,
-                        "message_thread_id": thread_id
-                    })
-
-                response_data = response.json()
-                if response_data.get("ok"):
-                    forwarded_message = response_data["result"]["message_id"]
-                    break  
-                else:
-                    await asyncio.sleep(2)  
-            except httpx.ReadTimeout:
-                await asyncio.sleep(5)
-
-        if forwarded_message:
-            await asyncio.sleep(1)  
-            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
-                "chat_id": GROUP_ID,
+        for message in random_messages:
+            message_id = message["message_id"]
+            await client.get(f"{BASE_URL}/copyMessage", params={
+                "chat_id": chat_id,
+                "from_chat_id": GROUP_ID,
                 "message_id": message_id
             })
-            delete_data = delete_response.json()
-            if not delete_data.get("ok"):  
-                print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
+            await asyncio.sleep(1)  
 
-# انتخاب و ارسال ۳ آهنگ شانسی به تاپیک "11:11"
-async def forward_random_music():
-    try:
-        topics = await get_forum_topics()
-        selected_messages = []
+# پردازش آهنگ‌های جدید و حذف آهنگ‌های تکراری در همان تاپیک
+async def forward_music(message, thread_id):
+    audio = message.get("audio", {})
+    audio_name = audio.get("title", "Unknown")
+    message_id = message["message_id"]
 
-        for thread_id, name in topics.items():
-            if name not in EXCLUDED_TOPICS_RANDOM:  
-                messages = await get_topic_messages(thread_id)
-                selected_messages.extend(messages)
+    if thread_id not in song_tracker:
+        song_tracker[thread_id] = {}
 
-        if len(selected_messages) >= RANDOM_SONG_COUNT:
-            random_messages = random.sample(selected_messages, RANDOM_SONG_COUNT)
-        else:
-            random_messages = selected_messages  
-
-        topic_11_11 = await get_11_11_topic()
-        if not topic_11_11:
-            return  
+    if audio_name in song_tracker[thread_id]:
+        old_message_id = song_tracker[thread_id][audio_name]
 
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            for message in random_messages:
-                message_id = message["message_id"]
-                await client.get(f"{BASE_URL}/copyMessage", params={
-                    "chat_id": GROUP_ID,
-                    "from_chat_id": GROUP_ID,
-                    "message_id": message_id,
-                    "message_thread_id": topic_11_11
-                })
-                await asyncio.sleep(1)  
-    except Exception as e:
-        print(f"⚠️ خطا در `forward_random_music()`: {e}")
+            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": old_message_id
+            })
+            delete_data = delete_response.json()
+            if delete_data.get("ok"):
+                general_topic_id = await get_general_topic()
+                if general_topic_id:
+                    await send_message(GROUP_ID, f"🔄 آهنگ **{audio_name}** در تاپیک `{thread_id}` جایگزین شد!")
 
-# بررسی زمان و اجرای وظایف شبانه
-async def check_time_for_scheduled_task():
-    while True:
-        now = datetime.now(IRAN_TZ)
-        if now.hour == 23 and now.minute == 11:  
-            await forward_random_music()
-            await asyncio.sleep(60)  
-        await asyncio.sleep(10)  
+    song_tracker[thread_id][audio_name] = message_id  
 
-# دریافت پیام‌های جدید و بررسی آهنگ‌ها
+# بررسی پیام‌های جدید و دستورات
 async def check_new_messages():
     last_update_id = None
     while True:
@@ -159,9 +119,14 @@ async def check_new_messages():
                         last_update_id = update["update_id"] + 1
                         if "message" in update:
                             message = update["message"]
+                            chat_id = message["chat"]["id"]
+                            text = message.get("text", "")
                             thread_id = message.get("message_thread_id")
 
-                            if bot_enabled and "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
+                            if text == "/random" and chat_id != GROUP_ID:
+                                await send_random_songs(chat_id)  # ارسال آهنگ‌های تصادفی در چت خصوصی
+
+                            elif bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
                                 await forward_music(message, thread_id)
                                 await asyncio.sleep(1)
         except Exception as e:
@@ -170,18 +135,17 @@ async def check_new_messages():
 
         await asyncio.sleep(3)
 
-# اجرای اصلی با مکانیسم Restart خودکار
+# اجرای اصلی
 async def main():
     global startup_message_sent
     if not startup_message_sent:
-        await send_message("🔥 I'm Ready, brothers!")
+        await send_message(GROUP_ID, "🔥 I'm Ready, brothers!")
         startup_message_sent = True
 
     while True:
         try:
             await asyncio.gather(
-                check_new_messages(),
-                check_time_for_scheduled_task()
+                check_new_messages()
             )
         except Exception as e:
             print(f"⚠️ کرش غیرمنتظره: {e}")
