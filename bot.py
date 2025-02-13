@@ -42,18 +42,17 @@ async def get_forum_topics():
             return {topic["message_thread_id"]: topic["name"] for topic in data["result"]["topics"]}
         return {}
 
-# دریافت پیام‌های یک تاپیک خاص
+# دریافت پیام‌های قدیمی یک تاپیک (100 پیام آخر)
 async def get_topic_messages(thread_id):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getUpdates")
+        response = await client.get(f"{BASE_URL}/getChatHistory", params={
+            "chat_id": GROUP_ID,
+            "message_thread_id": thread_id,
+            "limit": 100
+        })
         data = response.json()
         if data.get("ok"):
-            messages = []
-            for update in data["result"]:
-                if "message" in update and update["message"].get("message_thread_id") == thread_id:
-                    if "audio" in update["message"]:
-                        messages.append(update["message"])
-            return messages
+            return [msg for msg in data["result"] if "audio" in msg]
         return []
 
 # جستجوی آهنگ بر اساس نام و ارسال نتیجه (بدون حذف پیام اصلی)
