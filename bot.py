@@ -17,32 +17,45 @@ async def send_message(text):
     async with httpx.AsyncClient() as client:
         await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": GROUP_ID, "text": text})
 
-# فوروارد کردن آهنگ‌ها بدون کپشن و حذف پیام اصلی
+# فوروارد کردن آهنگ‌ها بدون کپشن و بررسی قبل از حذف
 async def forward_music(message, thread_id):
     message_id = message["message_id"]
     has_caption = "caption" in message  # بررسی وجود کپشن
+    forwarded_message = None  # ذخیره پیام فوروارد شده
 
     async with httpx.AsyncClient() as client:
-        # اگر آهنگ دارای کپشن باشد، آن را بدون کپشن فوروارد کنیم
+        # اگر آهنگ کپشن دارد، بدون کپشن فوروارد کنیم
         if has_caption:
-            await client.get(f"{BASE_URL}/sendAudio", params={
+            response = await client.get(f"{BASE_URL}/sendAudio", params={
                 "chat_id": GROUP_ID,
                 "audio": message["audio"]["file_id"],  # ارسال فقط فایل آهنگ
                 "message_thread_id": thread_id
             })
+            response_data = response.json()
+            if response_data.get("ok"):
+                forwarded_message = response_data["result"]["message_id"]
         else:
-            await client.get(f"{BASE_URL}/copyMessage", params={
+            response = await client.get(f"{BASE_URL}/copyMessage", params={
                 "chat_id": GROUP_ID,
                 "from_chat_id": GROUP_ID,
                 "message_id": message_id,
                 "message_thread_id": thread_id
             })
+            response_data = response.json()
+            if response_data.get("ok"):
+                forwarded_message = response_data["result"]["message_id"]
 
-        # حذف پیام اصلی بعد از فوروارد
-        await client.get(f"{BASE_URL}/deleteMessage", params={
-            "chat_id": GROUP_ID,
-            "message_id": message_id
-        })
+        # بررسی اگر پیام فوروارد شد، پیام اصلی را حذف کنیم
+        if forwarded_message:
+            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": message_id
+            })
+            delete_data = delete_response.json()
+            if not delete_data.get("ok"):  # اگر حذف پیام ناموفق بود، نمایش دلیل
+                print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
+        else:
+            print(f"❌ پیام {message_id} فوروارد نشد، پس حذف نمی‌شود.")
 
 # دریافت پیام‌های جدید و بررسی آهنگ‌ها
 async def check_new_messages():
