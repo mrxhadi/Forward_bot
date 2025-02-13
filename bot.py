@@ -43,28 +43,12 @@ async def send_message(chat_id, text):
             await asyncio.sleep(5)
             await send_message(chat_id, text)
 
-# 📌 **ذخیره آهنگ جدید در دیتابیس**
-def store_song(message, thread_id):
-    audio = message.get("audio", {})
-    title = audio.get("title", "نامشخص").lower()
-    performer = audio.get("performer", "نامشخص").lower()
-    message_id = message["message_id"]
-
-    # اضافه کردن آهنگ جدید
-    song_database.append({
-        "title": title,
-        "performer": performer,
-        "message_id": message_id,
-        "thread_id": thread_id
-    })
-
-    # ذخیره در JSON
-    save_database(song_database)
-
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
     audio_file_id = message["audio"]["file_id"]
+    audio_title = message["audio"].get("title", "نامشخص").lower()
+    audio_performer = message["audio"].get("performer", "نامشخص").lower()
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
@@ -76,6 +60,18 @@ async def forward_music_without_caption(message, thread_id):
         forward_data = forward_response.json()
 
         if forward_data.get("ok"):
+            new_message_id = forward_data["result"]["message_id"]
+
+            # ذخیره پیام جدید در دیتابیس
+            song_database.append({
+                "title": audio_title,
+                "performer": audio_performer,
+                "message_id": new_message_id,
+                "thread_id": thread_id
+            })
+            save_database(song_database)
+
+            # حذف پیام اصلی
             await asyncio.sleep(1)
             delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
                 "chat_id": GROUP_ID,
@@ -146,7 +142,6 @@ async def check_new_messages():
                             # 📌 **اگر آهنگ جدید در گروه ارسال شد، آن را ذخیره و فوروارد کند**
                             if bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
                                 thread_id = message.get("message_thread_id")
-                                store_song(message, thread_id)
                                 await forward_music_without_caption(message, thread_id)
                                 await asyncio.sleep(1)
 
