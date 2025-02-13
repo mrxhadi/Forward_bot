@@ -37,6 +37,15 @@ async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": chat_id, "text": text})
 
+# 📌 **ارسال فایل `songs.json` به پیوی**
+async def send_file_to_user(chat_id):
+    if os.path.exists(DATABASE_FILE):
+        async with httpx.AsyncClient() as client:
+            with open(DATABASE_FILE, "rb") as file:
+                await client.post(f"{BASE_URL}/sendDocument", params={"chat_id": chat_id}, files={"document": file})
+    else:
+        await send_message(chat_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
+
 # 📌 **دریافت و ذخیره `songs.json` از پیوی**
 async def handle_document(document, chat_id):
     global song_database  
