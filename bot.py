@@ -10,21 +10,7 @@ if not BOT_TOKEN or not GROUP_ID:
     raise ValueError("❌ متغیرهای محیطی BOT_TOKEN و GROUP_ID تنظیم نشده‌اند!")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-bot_enabled = False
-
-# دریافت لیست پیام‌های قدیمی در تاپیک‌ها و پردازش آنها
-async def process_existing_audios():
-    async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BASE_URL}/getUpdates")
-        data = response.json()
-
-        if data.get("ok"):
-            for update in data["result"]:
-                if "message" in update:
-                    message = update["message"]
-                    if "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
-                        thread_id = message.get("message_thread_id")  # گرفتن آیدی تاپیک
-                        await forward_music(message, thread_id, delete_original=True)
+bot_enabled = True  # ربات همیشه فعال باشد
 
 # ارسال پیام جدید به تلگرام
 async def send_message(text):
@@ -32,30 +18,26 @@ async def send_message(text):
         await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": GROUP_ID, "text": text})
 
 # فوروارد کردن آهنگ‌ها به تاپیک خودش و حذف پیام اصلی
-async def forward_music(message, thread_id, delete_original=False):
+async def forward_music(message, thread_id):
     message_id = message["message_id"]
     async with httpx.AsyncClient() as client:
+        # فوروارد آهنگ در همان تاپیک
         await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": GROUP_ID,
             "from_chat_id": GROUP_ID,
             "message_id": message_id,
             "message_thread_id": thread_id
         })
-        if delete_original:
-            await client.get(f"{BASE_URL}/deleteMessage", params={
-                "chat_id": GROUP_ID,
-                "message_id": message_id
-            })
+        
+        # تلاش برای حذف پیام اصلی
+        delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
+            "chat_id": GROUP_ID,
+            "message_id": message_id
+        })
+        delete_data = delete_response.json()
 
-# پردازش دستور `/enable`
-async def enable_bot():
-    global bot_enabled
-    if not bot_enabled:
-        bot_enabled = True
-        await send_message("✅ ربات فعال شد و پردازش آهنگ‌های قدیمی آغاز شد!")
-        await process_existing_audios()
-    else:
-        await send_message("⚡ ربات قبلاً فعال شده است!")
+        if not delete_data.get("ok"):  # اگر حذف پیام ناموفق بود، نمایش دلیل
+            print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
 
 # دریافت پیام‌های جدید و بررسی آهنگ‌ها
 async def check_new_messages():
@@ -73,16 +55,14 @@ async def check_new_messages():
                         message = update["message"]
                         thread_id = message.get("message_thread_id")
 
-                        if "text" in message and message["text"] == "/enable":
-                            await enable_bot()
-                        elif bot_enabled and "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
+                        if bot_enabled and "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
                             await forward_music(message, thread_id)
 
         await asyncio.sleep(3)  # هر 3 ثانیه چک کن
 
 # اجرای اصلی
 async def main():
-    await send_message("🔄 ربات راه‌اندازی شد، منتظر دستور `/enable` هستم...")
+    await send_message("🔄 ربات راه‌اندازی شد و در حال پردازش آهنگ‌های جدید است...")
     await check_new_messages()
 
 if __name__ == "__main__":
