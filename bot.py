@@ -22,7 +22,6 @@ GENERAL_TOPIC_NAME = "General"
 EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
 IRAN_TZ = pytz.timezone("Asia/Tehran")
 
-# مقداردهی اولیه برای جلوگیری از خطای "not defined"
 startup_message_sent = False  
 
 # ارسال پیام به تلگرام
@@ -46,13 +45,18 @@ async def get_forum_topics():
 # دریافت پیام‌های یک تاپیک خاص
 async def get_topic_messages(thread_id):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getForumTopicMessages", params={"chat_id": GROUP_ID, "message_thread_id": thread_id})
+        response = await client.get(f"{BASE_URL}/getUpdates")
         data = response.json()
         if data.get("ok"):
-            return [msg for msg in data["result"]["messages"] if "audio" in msg]
+            messages = []
+            for update in data["result"]:
+                if "message" in update and update["message"].get("message_thread_id") == thread_id:
+                    if "audio" in update["message"]:
+                        messages.append(update["message"])
+            return messages
         return []
 
-# جستجوی آهنگ بر اساس نام و ارسال نتیجه
+# جستجوی آهنگ بر اساس نام و ارسال نتیجه (بدون حذف پیام اصلی)
 async def search_and_forward_song(chat_id, query):
     print(f"🔍 جستجو برای: {query}")
 
@@ -103,12 +107,14 @@ async def check_new_messages():
                             chat_type = message["chat"]["type"]
                             text = message.get("text", "")
 
+                            # اگر در چت خصوصی نام آهنگی ارسال شد، جستجو انجام شود
                             if chat_type == "private" and text:
                                 await search_and_forward_song(chat_id, text)
 
+                            # اگر آهنگ جدید در گروه ارسال شد، آن را فوروارد و حذف کند
                             elif bot_enabled and "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
                                 thread_id = message.get("message_thread_id")
-                                await forward_music(message, thread_id)
+                                await forward_and_delete_music(message, thread_id)
                                 await asyncio.sleep(1)
 
         except Exception as e:
@@ -117,17 +123,27 @@ async def check_new_messages():
 
         await asyncio.sleep(3)
 
-# فوروارد کردن آهنگ‌های جدید بدون حذف کپشن
-async def forward_music(message, thread_id):
+# فوروارد آهنگ‌های جدید و حذف پیام اصلی (برای تاپیک‌ها، نه جستجو)
+async def forward_and_delete_music(message, thread_id):
     message_id = message["message_id"]
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        await client.get(f"{BASE_URL}/copyMessage", params={
+        forward_response = await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": GROUP_ID,
             "from_chat_id": GROUP_ID,
             "message_id": message_id,
             "message_thread_id": thread_id
         })
-        await asyncio.sleep(1)
+        forward_data = forward_response.json()
+
+        if forward_data.get("ok"):
+            await asyncio.sleep(1)
+            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": message_id
+            })
+            delete_data = delete_response.json()
+            if not delete_data.get("ok"):
+                print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
 
 # اجرای اصلی
 async def main():
