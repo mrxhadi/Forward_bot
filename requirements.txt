@@ -1,3 +1,4 @@
-requests
 httpx
+asyncio
+requests
 pytz
