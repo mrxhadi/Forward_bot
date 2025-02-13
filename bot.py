@@ -106,30 +106,44 @@ async def forward_music_without_caption(message, thread_id):
             if not delete_data.get("ok"):
                 print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
 
-# 📌 **پیدا کردن تاپیک `11:11`**
-async def get_11_11_topic():
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getForumTopicList", params={"chat_id": GROUP_ID})
-        data = response.json()
-        if data.get("ok"):
-            for topic in data["result"]["topics"]:
-                if topic["name"] == "11:11":
-                    return topic["message_thread_id"]
-    return None
+# 📌 **دریافت پیام‌های جدید**
+async def check_new_messages():
+    last_update_id = None
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                response = await client.get(f"{BASE_URL}/getUpdates", params={"offset": last_update_id})
+                data = response.json()
+
+                if data.get("ok"):
+                    for update in data["result"]:
+                        last_update_id = update["update_id"] + 1
+                        if "message" in update:
+                            message = update["message"]
+                            chat_id = message["chat"]["id"]
+
+                            # فقط پیام‌های گروه بررسی بشن
+                            if bot_enabled and "audio" in message and str(chat_id) == GROUP_ID:
+                                thread_id = message.get("message_thread_id")
+                                await forward_music_without_caption(message, thread_id)
+                                await asyncio.sleep(1)
+
+        except Exception as e:
+            print(f"⚠️ خطا در `check_new_messages()`: {e}")
+            await asyncio.sleep(5)
+
+        await asyncio.sleep(3)
 
 # 📌 **ارسال سه آهنگ تصادفی به تاپیک `11:11` هر شب ساعت 11:11**
 async def send_nightly_random_songs():
     while True:
         now = datetime.now(IRAN_TZ)
         if now.hour == 23 and now.minute == 11:  # 11:11 PM به وقت ایران
-            topic_11_11 = await get_11_11_topic()
-            if not topic_11_11:
-                return
-
             valid_songs = [song for song in song_database if song["thread_id"] not in EXCLUDED_TOPICS_RANDOM]
             if not valid_songs:
                 return
 
+            topic_11_11 = "11:11"  # اینو با آی‌دی واقعی جایگزین کن
             selected_songs = random.sample(valid_songs, min(RANDOM_SONG_COUNT, len(valid_songs)))
 
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -140,7 +154,7 @@ async def send_nightly_random_songs():
                         "message_id": song["message_id"],
                         "message_thread_id": topic_11_11
                     })
-            await asyncio.sleep(60)  # جلوگیری از ارسال چندباره در همان دقیقه
+            await asyncio.sleep(60)
 
         await asyncio.sleep(10)
 
