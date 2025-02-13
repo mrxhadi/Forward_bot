@@ -12,6 +12,7 @@ if not BOT_TOKEN or not GROUP_ID:
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 bot_enabled = True  # ربات همیشه فعال باشد
 TIMEOUT = 20  # افزایش زمان تایم‌اوت به 20 ثانیه
+startup_message_sent = False  # جلوگیری از ارسال پیام خوشامدگویی تکراری
 
 # ارسال پیام جدید به تلگرام
 async def send_message(text):
@@ -97,7 +98,10 @@ async def check_new_messages():
 
 # اجرای اصلی
 async def main():
-    await send_message("🔄 ربات راه‌اندازی شد و در حال پردازش آهنگ‌های جدید است...")
+    global startup_message_sent
+    if not startup_message_sent:
+        await send_message("I'm Ready, brothers!")  # فقط یک‌بار ارسال می‌شود
+        startup_message_sent = True  # جلوگیری از ارسال مجدد
     await check_new_messages()
 
 if __name__ == "__main__":
