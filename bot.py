@@ -21,13 +21,13 @@ async def send_message(text):
             await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": GROUP_ID, "text": text})
         except httpx.ReadTimeout:
             print("⏳ درخواست تایم‌اوت شد! تلاش مجدد...")
-            await asyncio.sleep(5)  # صبر 5 ثانیه و تلاش مجدد
+            await asyncio.sleep(5)
             await send_message(text)
 
 # فوروارد کردن آهنگ‌ها بدون کپشن و بررسی قبل از حذف
 async def forward_music(message, thread_id):
     message_id = message["message_id"]
-    has_caption = "caption" in message  # بررسی وجود کپشن
+    has_caption = "caption" in message
     forwarded_message = None  # ذخیره پیام فوروارد شده
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -36,7 +36,7 @@ async def forward_music(message, thread_id):
             if has_caption:
                 response = await client.get(f"{BASE_URL}/sendAudio", params={
                     "chat_id": GROUP_ID,
-                    "audio": message["audio"]["file_id"],  # ارسال فقط فایل آهنگ
+                    "audio": message["audio"]["file_id"],
                     "message_thread_id": thread_id
                 })
                 response_data = response.json()
@@ -55,19 +55,20 @@ async def forward_music(message, thread_id):
 
             # بررسی اگر پیام فوروارد شد، پیام اصلی را حذف کنیم
             if forwarded_message:
+                await asyncio.sleep(0.5)  # جلوگیری از Rate Limit
                 delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
                     "chat_id": GROUP_ID,
                     "message_id": message_id
                 })
                 delete_data = delete_response.json()
-                if not delete_data.get("ok"):  # اگر حذف پیام ناموفق بود، نمایش دلیل
+                if not delete_data.get("ok"):
                     print(f"⚠️ پیام {message_id} حذف نشد: {delete_data['description']}")
             else:
                 print(f"❌ پیام {message_id} فوروارد نشد، پس حذف نمی‌شود.")
 
         except httpx.ReadTimeout:
             print("⏳ درخواست تایم‌اوت شد! تلاش مجدد در 5 ثانیه...")
-            await asyncio.sleep(5)  # صبر 5 ثانیه و تلاش مجدد
+            await asyncio.sleep(5)
             await forward_music(message, thread_id)
 
 # دریافت پیام‌های جدید و بررسی آهنگ‌ها
@@ -89,19 +90,20 @@ async def check_new_messages():
 
                             if bot_enabled and "audio" in message and str(message["chat"]["id"]) == GROUP_ID:
                                 await forward_music(message, thread_id)
+                                await asyncio.sleep(0.8)  # جلوگیری از بلاک شدن توسط تلگرام
 
             except httpx.ReadTimeout:
                 print("⏳ تایم‌اوت در دریافت پیام‌های جدید! تلاش مجدد...")
-                await asyncio.sleep(5)  # صبر 5 ثانیه و تلاش مجدد
+                await asyncio.sleep(5)
 
-        await asyncio.sleep(3)  # هر 3 ثانیه چک کن
+        await asyncio.sleep(3)
 
 # اجرای اصلی
 async def main():
     global startup_message_sent
     if not startup_message_sent:
-        await send_message("I'm Ready, brothers!")  # فقط یک‌بار ارسال می‌شود
-        startup_message_sent = True  # جلوگیری از ارسال مجدد
+        await send_message("🔥 I'm Ready, brothers!")
+        startup_message_sent = True
     await check_new_messages()
 
 if __name__ == "__main__":
