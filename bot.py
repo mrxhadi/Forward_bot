@@ -166,7 +166,7 @@ async def check_new_messages():
                         text = message.get("text", "").strip()
 
                         if text == "/start":
-                            await send_message(chat_id, "از منوی دستورات استفاده کنید.\n📌 @HTG_music")
+                            await send_message(chat_id, " /help از منوی دستورات استفاده کن")
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
                         elif text == "/random":
@@ -174,7 +174,7 @@ async def check_new_messages():
                         elif text == "/list":
                             await send_file_to_user(chat_id)
                         elif text == "/help":
-                            await send_message(chat_id, "📌 این ربات به @HTG_music متصل است.\n✅ `/random` → ۳ آهنگ تصادفی")
+                            await send_message(chat_id, " /random سه تا اهنگ رندوم بگیر")
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
