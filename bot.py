@@ -187,8 +187,9 @@ async def check_new_messages():
 # 📌 **اجرای اصلی**
 async def main():
     await send_message(GROUP_ID, "🔥 I'm Ready, brothers!")
-    asyncio.create_task(check_time_for_scheduled_task())
-await check_new_messages()
+    
+    asyncio.create_task(check_time_for_scheduled_task())  # اجرای مستقل 11:11
+    await check_new_messages()  # اجرای اصلی پیام‌ها
 
 if __name__ == "__main__":
     asyncio.run(main())
