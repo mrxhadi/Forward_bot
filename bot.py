@@ -37,7 +37,7 @@ async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": chat_id, "text": text})
 
-# 📌 **ارسال فایل `songs.json` به پیوی**
+# 📌 **ارسال فایل `songs.json` به پیوی (دستور `/list` کار می‌کند ولی در منو نمایش داده نمی‌شود)**
 async def send_file_to_user(chat_id):
     if os.path.exists(DATABASE_FILE):
         async with httpx.AsyncClient() as client:
@@ -123,13 +123,13 @@ async def check_new_messages():
 
                             # 📌 **دستورات ربات**
                             elif text == "/start":
-                                await send_message(chat_id, "🎵 خوش آمدید! از منوی دستورات استفاده کنید: `/random`, `/list`, `/help`")
+                                await send_message(chat_id, "🎵 خوش آمدید! این ربات به آرشیو کانال @HTG_music متصل است.\n\nاز منوی دستورات استفاده کنید:\n✅ `/random` → دریافت ۳ آهنگ تصادفی\n❓ `/help` → نمایش راهنما")
                             elif text == "/list":
-                                await send_file_to_user(chat_id)
+                                await send_file_to_user(chat_id)  # این کار می‌کند ولی در راهنما نیست
                             elif text == "/random":
                                 await send_random_song(chat_id)
                             elif text == "/help":
-                                await send_message(chat_id, "📌 **دستورات:**\n🎵 `/random` → دریافت ۳ آهنگ تصادفی\n📁 `/list` → دریافت لیست آهنگ‌ها\n❓ `/help` → نمایش راهنما")
+                                await send_message(chat_id, "📌 **دستورات:**\n🎵 `/random` → دریافت ۳ آهنگ تصادفی\n❓ `/help` → نمایش راهنما\n\n📌 این ربات به آرشیو کانال @HTG_music متصل است.")
 
         except Exception as e:
             print(f"⚠️ خطا: {e}")
