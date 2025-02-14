@@ -113,6 +113,42 @@ async def forward_music_without_caption(message, thread_id):
                 "message_id": message_id
             })
 
+# 📌 **ارسال ۳ آهنگ تصادفی به `11:11` هر شب**
+async def send_random_songs_to_11_11():
+    if not song_database:
+        return
+
+    topic_id = None
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        response = await client.get(f"{BASE_URL}/getForumTopicList", params={"chat_id": GROUP_ID})
+        data = response.json()
+        if data.get("ok"):
+            for topic in data["result"]["topics"]:
+                if topic["name"] == TOPIC_11_11:
+                    topic_id = topic["message_thread_id"]
+                    break
+
+    if topic_id:
+        songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
+        async with httpx.AsyncClient() as client:
+            for song in songs:
+                await client.get(f"{BASE_URL}/copyMessage", params={
+                    "chat_id": GROUP_ID,
+                    "from_chat_id": GROUP_ID,
+                    "message_id": song["message_id"],
+                    "message_thread_id": topic_id
+                })
+                await asyncio.sleep(1)
+
+# 📌 **بررسی زمان و اجرای وظایف شبانه**
+async def check_time_for_scheduled_task():
+    while True:
+        now = datetime.now(IRAN_TZ)
+        if now.hour == 23 and now.minute == 11:
+            await send_random_songs_to_11_11()
+            await asyncio.sleep(60)  
+        await asyncio.sleep(10)  
+
 # 📌 **دریافت و پردازش پیام‌های جدید**
 async def check_new_messages():
     last_update_id = None
@@ -129,7 +165,9 @@ async def check_new_messages():
                         chat_id = message.get("chat", {}).get("id")
                         text = message.get("text", "").strip()
 
-                        if "document" in message:
+                        if text == "/start":
+                            await send_message(chat_id, "از منوی دستورات استفاده کنید.\n📌 @HTG_music")
+                        elif "document" in message:
                             await handle_document(message["document"], chat_id)
                         elif text == "/random":
                             await send_random_song(chat_id)
@@ -149,13 +187,7 @@ async def check_new_messages():
 # 📌 **اجرای اصلی**
 async def main():
     await send_message(GROUP_ID, "🔥 I'm Ready, brothers!")
-
-    while True:
-        try:
-            await check_new_messages()
-        except Exception as e:
-            print(f"⚠️ کرش غیرمنتظره: {e}")
-            await asyncio.sleep(RESTART_DELAY)
+    await asyncio.gather(check_new_messages(), check_time_for_scheduled_task())
 
 if __name__ == "__main__":
     asyncio.run(main())
