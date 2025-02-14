@@ -37,68 +37,33 @@ async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": chat_id, "text": text})
 
-# 📌 **ارسال فایل `songs.json` به پیوی (دستور `/list` کار می‌کند ولی در منو نمایش داده نمی‌شود)**
-async def send_file_to_user(chat_id):
-    if os.path.exists(DATABASE_FILE):
-        async with httpx.AsyncClient() as client:
-            with open(DATABASE_FILE, "rb") as file:
-                await client.post(f"{BASE_URL}/sendDocument", params={"chat_id": chat_id}, files={"document": file})
-    else:
-        await send_message(chat_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
+# 📌 **فوروارد آهنگ بدون کپشن و حذف پیام اصلی**
+async def forward_music_without_caption(message, thread_id):
+    message_id = message["message_id"]
+    audio = message["audio"]
 
-# 📌 **دریافت و ذخیره `songs.json` از پیوی**
-async def handle_document(document, chat_id):
-    global song_database  
-    file_name = document["file_name"]
-    
-    if file_name != "songs.json":
-        await send_message(chat_id, "⚠️ این فایل پشتیبانی نمی‌شود! لطفاً `songs.json` ارسال کنید.")
-        return
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
+            "chat_id": GROUP_ID,
+            "audio": audio["file_id"],
+            "message_thread_id": thread_id,
+            "caption": ""  # حذف کپشن
+        })
 
-    file_id = document["file_id"]
-    print(f"📥 دریافت فایل `{file_name}` از {chat_id}")
-
-    async with httpx.AsyncClient() as client:
-        file_info = await client.get(f"{BASE_URL}/getFile", params={"file_id": file_id})
-        file_info_data = file_info.json()
-
-        if not file_info_data.get("ok"):
-            await send_message(chat_id, "❌ خطا در دریافت فایل از سرور تلگرام!")
-            return
-
-        file_path = file_info_data["result"]["file_path"]
-        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
-
-        response = await client.get(file_url)
-        with open(DATABASE_FILE, "wb") as file:
-            file.write(response.content)
-
-    song_database = load_database()  
-    print(f"✅ دیتابیس آپدیت شد! تعداد آهنگ‌ها: {len(song_database)}")
-    await send_message(chat_id, f"✅ دیتابیس آپدیت شد! تعداد آهنگ‌ها: {len(song_database)}")
-
-# 📌 **ارسال ۳ آهنگ تصادفی به پیوی**
-async def send_random_song(chat_id):
-    global song_database
-
-    if not song_database:
-        await send_message(chat_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
-        return
-
-    songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
-
-    async with httpx.AsyncClient() as client:
-        for song in songs:
-            response = await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": chat_id,
-                "from_chat_id": GROUP_ID,
-                "message_id": song["message_id"]
+        forward_data = forward_response.json()
+        if forward_data.get("ok"):
+            new_message_id = forward_data["result"]["message_id"]
+            song_database.append({
+                "message_id": new_message_id,
+                "thread_id": thread_id
             })
+            save_database(song_database)
 
-            if not response.json().get("ok"):  
-                print(f"⚠️ پیام {song['message_id']} دیگر در گروه وجود ندارد. حذف از دیتابیس...")
-                song_database.remove(song)
-                save_database(song_database)
+            await asyncio.sleep(1)
+            await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": message_id
+            })
 
 # 📌 **دریافت و پردازش پیام‌های جدید**
 async def check_new_messages():
@@ -117,19 +82,9 @@ async def check_new_messages():
                             chat_id = message["chat"]["id"]
                             text = message.get("text", "").strip()
 
-                            # 📌 **دریافت و ذخیره `songs.json`**
-                            if "document" in message:
-                                await handle_document(message["document"], chat_id)
-
-                            # 📌 **دستورات ربات**
-                            elif text == "/start":
-                                await send_message(chat_id, "🎵 خوش آمدید! این ربات به آرشیو کانال @HTG_music متصل است.\n\nاز منوی دستورات استفاده کنید:\n✅ `/random` → دریافت ۳ آهنگ تصادفی\n❓ `/help` → نمایش راهنما")
-                            elif text == "/list":
-                                await send_file_to_user(chat_id)  # این کار می‌کند ولی در راهنما نیست
-                            elif text == "/random":
-                                await send_random_song(chat_id)
-                            elif text == "/help":
-                                await send_message(chat_id, "📌 **دستورات:**\n🎵 `/random` → دریافت ۳ آهنگ تصادفی\n❓ `/help` → نمایش راهنما\n\n📌 این ربات به آرشیو کانال @HTG_music متصل است.")
+                            # 📌 **دریافت آهنگ و حذف کپشن**
+                            if "audio" in message and str(chat_id) == GROUP_ID:
+                                await forward_music_without_caption(message, message.get("message_thread_id"))
 
         except Exception as e:
             print(f"⚠️ خطا: {e}")
