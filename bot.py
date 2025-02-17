@@ -16,7 +16,7 @@ RANDOM_SONG_COUNT = 3
 
 IRAN_TZ = pytz.timezone("Asia/Tehran")
 EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
-TOPIC_11_11 = "11:11"  
+TOPIC_11_11_ID = 2463  # 📌 تاپیک `11:11`
 
 # 📌 **لود و ذخیره دیتابیس**
 def load_database():
@@ -116,39 +116,38 @@ async def forward_music_without_caption(message, thread_id):
 # 📌 **ارسال ۳ آهنگ تصادفی به `11:11` هر شب**
 async def send_random_songs_to_11_11():
     if not song_database:
+        print("⚠️ خطا: دیتابیس آهنگ‌ها خالی است.")
         return
 
-    topic_id = None
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/getForumTopicList", params={"chat_id": GROUP_ID})
-        data = response.json()
-        if data.get("ok"):
-            for topic in data["result"]["topics"]:
-                if topic["name"] == TOPIC_11_11:
-                    topic_id = topic["message_thread_id"]
-                    break
+    songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
 
-    if topic_id:
-        songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
-        async with httpx.AsyncClient() as client:
-            for song in songs:
-                await client.get(f"{BASE_URL}/copyMessage", params={
-                    "chat_id": GROUP_ID,
-                    "from_chat_id": GROUP_ID,
-                    "message_id": song["message_id"],
-                    "message_thread_id": topic_id
-                })
-                await asyncio.sleep(1)
+    async with httpx.AsyncClient() as client:
+        for song in songs:
+            response = await client.get(f"{BASE_URL}/copyMessage", params={
+                "chat_id": GROUP_ID,
+                "from_chat_id": GROUP_ID,
+                "message_id": song["message_id"],
+                "message_thread_id": TOPIC_11_11_ID  # 📌 ارسال مستقیم به تاپیک 11:11
+            })
+            response_data = response.json()
 
+            if not response_data.get("ok"):
+                print(f"⚠️ خطا در ارسال آهنگ {song['message_id']}: {response_data}")
+            await asyncio.sleep(1)
+            
 # 📌 **بررسی زمان و اجرای وظایف شبانه**
 async def check_time_for_scheduled_task():
     while True:
         now = datetime.now(IRAN_TZ)
         if now.hour == 23 and now.minute == 11:
-            print("🕚 ارسال آهنگ‌های `11:11`...")
-            asyncio.create_task(send_random_songs_to_11_11())  # اجرا به صورت جداگانه
-            await asyncio.sleep(70)  # صبر 70 ثانیه تا از ارسال مجدد جلوگیری شود
-        await asyncio.sleep(30)  # بررسی زمان هر ۳۰ ثانیه
+            print("🕚 ارسال آهنگ‌های `11:11` شروع شد...")
+            try:
+                await send_random_songs_to_11_11()
+                print("✅ آهنگ‌های `11:11` ارسال شدند.")
+            except Exception as e:
+                print(f"⚠️ خطا در اجرای `11:11`: {e}")
+            await asyncio.sleep(70)  
+        await asyncio.sleep(30)
 
 # 📌 **دریافت و پردازش پیام‌های جدید**
 async def check_new_messages():
