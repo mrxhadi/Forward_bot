@@ -145,9 +145,10 @@ async def check_time_for_scheduled_task():
     while True:
         now = datetime.now(IRAN_TZ)
         if now.hour == 23 and now.minute == 11:
-            asyncio.create_task(send_random_songs_to_11_11())
-            await asyncio.sleep(60)  
-        await asyncio.sleep(10)  
+            print("🕚 ارسال آهنگ‌های `11:11`...")
+            asyncio.create_task(send_random_songs_to_11_11())  # اجرا به صورت جداگانه
+            await asyncio.sleep(70)  # صبر 70 ثانیه تا از ارسال مجدد جلوگیری شود
+        await asyncio.sleep(30)  # بررسی زمان هر ۳۰ ثانیه
 
 # 📌 **دریافت و پردازش پیام‌های جدید**
 async def check_new_messages():
@@ -187,9 +188,9 @@ async def check_new_messages():
 # 📌 **اجرای اصلی**
 async def main():
     await send_message(GROUP_ID, "🔥 I'm Ready, brothers!")
-    
-    asyncio.create_task(check_time_for_scheduled_task())  # اجرای مستقل 11:11
-    await check_new_messages()  # اجرای اصلی پیام‌ها
+    asyncio.create_task(check_time_for_scheduled_task())
+    await check_new_messages()
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
