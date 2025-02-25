@@ -195,7 +195,11 @@ async def check_new_messages():
                         elif text == "/list":
                             await send_file_to_user(chat_id)
                         elif text == "/help":
-                            await send_message(chat_id, " /random سه تا اهنگ رندوم بگیر")
+                            await send_message(chat_id, " **دستورات ربات:**\n"
+                                " `/random` - سه تا آهنگ رندوم بگیر\n"
+                                " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
+                                " **مثال:**\n"
+                                "`/search wanted`")
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
