@@ -94,7 +94,7 @@ async def search_song(chat_id, query):
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    song_list = "\n".join([f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" for song in results])
+    song_list = "\n".join([f"🔹 `{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}`" for song in results])
 
     response_text = "🎵 **نتایج جستجو:**\n"
     if song_list:
@@ -201,6 +201,10 @@ async def check_new_messages():
                             await send_message(chat_id, " /help از منوی دستورات استفاده کن")
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
+                        elif text in [f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" for song in song_database]:
+                            selected_song = next((song for song in song_database if f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" == text), None)
+                            if selected_song:
+                            await send_selected_song(chat_id, selected_song)
                         elif text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
@@ -232,7 +236,8 @@ async def send_selected_song(chat_id, song):
         await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": chat_id,
             "from_chat_id": GROUP_ID,
-            "message_id": song["message_id"]})
+            "message_id": song["message_id"]
+        })
 
 # 📌 **اجرای اصلی**
 async def main():
