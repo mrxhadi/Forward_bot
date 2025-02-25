@@ -91,27 +91,49 @@ async def send_random_song(chat_id):
 
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
+async def search_song(chat_id, query):
     query = query.lower().strip()
-    
+
     # 📌 دریافت عناوین آهنگ‌ها برای مقایسه
-    title_map = {song.get("title", "").lower(): song for song in song_database}
+    title_map = {f"{song.get('title', '')} - {song.get('performer', '')}": song for song in song_database}
     titles = list(title_map.keys())
 
     # 📌 پیدا کردن ۵ نتیجه با بیشترین شباهت
     closest_matches = difflib.get_close_matches(query, titles, n=5, cutoff=0.4)
 
-    results = [title_map[title] for title in closest_matches]
-
-    if not results:
+    if not closest_matches:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ایجاد لیست نتایج به همراه فضای ویژه برای کپی کردن
-    song_list = "\n".join([f"‎{song['title']} - {song['performer']}" for song in results])
+    # 📌 ساخت دکمه‌های شیشه‌ای
+    keyboard = {
+        "inline_keyboard": [
+            [{"text": title, "callback_data": f"select_{title_map[title]['message_id']}"}]
+            for title in closest_matches
+        ]
+    }
 
-    response_text = "🎵 **نتایج جستجو:**\n" + song_list + "\n\n✏️ **روی یکی از نام‌ها کلیک کرده و ارسال کنید تا آهنگ فوروارد شود.**"
+    response_text = " نتایج جستجو:\n\n🔹 روی یکی از دکمه‌های زیر کلیک کنید تا آهنگ فوروارد شود."
 
-    await send_message(chat_id, response_text)
+    await send_message(chat_id, response_text, reply_markup=keyboard)
+
+# 📌 **پردازش کلیک روی دکمه‌های شیشه‌ای**
+async def handle_callback(callback_query):
+    data = callback_query["data"]
+
+    if data.startswith("select_"):
+        message_id = data.split("_")[1]
+        chat_id = callback_query["message"]["chat"]["id"]
+
+        async with httpx.AsyncClient() as client:
+            await client.get(f"{BASE_URL}/copyMessage", params={
+                "chat_id": chat_id,
+                "from_chat_id": GROUP_ID,
+                "message_id": message_id
+            })
+
+        # ارسال پیام تأیید
+        await send_message(chat_id, "✅ آهنگ موردنظر ارسال شد!")
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
