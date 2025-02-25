@@ -98,6 +98,24 @@ async def search_song(chat_id, query):
         for song in results:
             caption_text = f"🎵 {song.get('title', 'نامشخص')}\n👤 {song.get('performer', 'نامشخص')}"
 
+            # 📌 بررسی اینکه آیا آهنگ قبلاً کاور دارد یا نه
+            if not song.get("thumb"):
+                try:
+                    # 📌 دریافت اطلاعات پیام برای گرفتن `thumb`
+                    response = await client.get(f"{BASE_URL}/getMessage", params={
+                        "chat_id": GROUP_ID,
+                        "message_id": song["message_id"]
+                    })
+                    message_data = response.json()
+
+                    if message_data.get("ok") and "audio" in message_data["result"]:
+                        thumb_data = message_data["result"]["audio"].get("thumb")
+                        if thumb_data and "file_id" in thumb_data:
+                            song["thumb"] = thumb_data["file_id"]  # ذخیره `file_id`
+                            save_database(song_database)  # ذخیره در دیتابیس
+                except Exception as e:
+                    print(f"⚠️ خطا در دریافت کاور: {e}")
+
             # 📌 اگر آهنگ کاور دارد، ابتدا کاور را ارسال کن
             if song.get("thumb"):
                 await client.get(f"{BASE_URL}/sendPhoto", params={
