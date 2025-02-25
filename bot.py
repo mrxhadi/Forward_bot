@@ -95,7 +95,7 @@ async def search_song(chat_id, query):
         return
 
     # 📌 ایجاد لیست انتخابی برای کاربر
-    song_list = "\n".join([f"`{song['title']} - {song['performer']}`" for song in results])
+    song_list = "\n".join([f"{song['title']} - {song['performer']}" for song in results])
     
     response_text += song_list
     response_text += "\n\n کدومش؟ بگو تا برات بفرستم."
