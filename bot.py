@@ -15,7 +15,7 @@ RESTART_DELAY = 10
 RANDOM_SONG_COUNT = 3  
 
 IRAN_TZ = pytz.timezone("Asia/Tehran")
-EXCLUDED_TOPICS_RANDOM = ["Nostalgic", "Golchin-e Shad-e Irooni"]
+EXCLUDED_TOPICS_RANDOM = ["G(old)", "gym"]
 TOPIC_11_11_ID = 2463  # 📌 تاپیک `11:11`
 
 # 📌 **لود و ذخیره دیتابیس**
@@ -137,20 +137,33 @@ async def send_random_songs_to_11_11():
         print("⚠️ خطا: دیتابیس آهنگ‌ها خالی است.")
         return
 
-    songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
+    # 📌 لیست جدید تاپیک‌هایی که نباید در انتخاب تصادفی باشند
+    EXCLUDED_TOPICS_RANDOM = ["G(old)", "gym"]  # 🔹 نام‌های جدید جایگزین شوند
+
+    # 🎯 فیلتر کردن آهنگ‌ها برای حذف آهنگ‌های تاپیک‌های ممنوعه
+    filtered_songs = [song for song in song_database if song.get("thread_id") not in EXCLUDED_TOPICS_RANDOM]
+
+    if not filtered_songs:
+        print("⚠️ خطا: بعد از فیلتر کردن، هیچ آهنگی برای ارسال باقی نماند!")
+        return
+
+    songs = random.sample(filtered_songs, min(RANDOM_SONG_COUNT, len(filtered_songs)))
 
     async with httpx.AsyncClient() as client:
         for song in songs:
-            response = await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": GROUP_ID,
-                "from_chat_id": GROUP_ID,
-                "message_id": song["message_id"],
-                "message_thread_id": TOPIC_11_11_ID  # 📌 ارسال مستقیم به تاپیک 11:11
-            })
-            response_data = response.json()
+            try:
+                response = await client.get(f"{BASE_URL}/copyMessage", params={
+                    "chat_id": GROUP_ID,
+                    "from_chat_id": GROUP_ID,
+                    "message_id": song["message_id"],
+                    "message_thread_id": TOPIC_11_11_ID  
+                })
+                response_data = response.json()
 
-            if not response_data.get("ok"):
-                print(f"⚠️ خطا در ارسال آهنگ {song['message_id']}: {response_data}")
+                if not response_data.get("ok"):
+                    print(f"⚠️ خطا در ارسال آهنگ {song['message_id']}: {response_data}")
+            except Exception as e:
+                print(f"⚠️ خطا در ارسال آهنگ {song['message_id']}: {e}")
             await asyncio.sleep(1)
             
 # 📌 **بررسی زمان و اجرای وظایف شبانه**
