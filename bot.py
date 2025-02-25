@@ -96,21 +96,26 @@ async def send_random_song(chat_id):
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
-async def search_song(chat_id, query):
-    query = query.lower()
-    
-    # 📌 پیدا کردن ۵ نتیجه با بیشترین شباهت
-    titles = [song.get("title", "").lower() for song in song_database]
-    closest_matches = difflib.get_close_matches(query, titles, n=5, cutoff=0.3)
 
-    results = [song for song in song_database if song.get("title", "").lower() in closest_matches]
+# 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
+async def search_song(chat_id, query):
+    query = query.lower().strip()
+    
+    # 📌 دریافت عناوین آهنگ‌ها برای مقایسه
+    title_map = {song.get("title", "").lower(): song for song in song_database}
+    titles = list(title_map.keys())
+
+    # 📌 پیدا کردن ۵ نتیجه با بیشترین شباهت
+    closest_matches = difflib.get_close_matches(query, titles, n=5, cutoff=0.4)
+
+    results = [title_map[title] for title in closest_matches]
 
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ایجاد لیست انتخابی برای کاربر (با قابلیت کپی)
-    song_list = "\n".join([f"\u200B{song['title']} - {song['performer']}" for song in results])
+    # 📌 ایجاد لیست انتخابی برای کاربر (✅ قابل کپی کردن)
+    song_list = "\n".join([f"\u2063{song['title']} - {song['performer']}" for song in results])
 
     response_text = "🎵 **نتایج جستجو:**\n"
     response_text += song_list
