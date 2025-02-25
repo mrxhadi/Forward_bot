@@ -203,7 +203,7 @@ async def check_new_messages():
                             await handle_document(message["document"], chat_id)
                         elif text in [f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" for song in song_database]:
                             selected_song = next((song for song in song_database if f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" == text), None)
-                            if selected_song:
+                        if selected_song:
                             await send_selected_song(chat_id, selected_song)
                         elif text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
