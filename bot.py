@@ -96,6 +96,18 @@ async def search_song(chat_id, query):
 
     async with httpx.AsyncClient() as client:
         for song in results:
+            caption_text = f"🎵 {song.get('title', 'نامشخص')}\n👤 {song.get('performer', 'نامشخص')}"
+
+            # 📌 اگر آهنگ کاور دارد، ابتدا کاور را ارسال کن
+            if song.get("thumb"):
+                await client.get(f"{BASE_URL}/sendPhoto", params={
+                    "chat_id": chat_id,
+                    "photo": song["thumb"],
+                    "caption": caption_text
+                })
+                await asyncio.sleep(1)  # تأخیر کوتاه برای جلوگیری از محدودیت API
+
+            # 📌 حالا خود آهنگ را ارسال کن
             await client.get(f"{BASE_URL}/copyMessage", params={
                 "chat_id": chat_id,
                 "from_chat_id": GROUP_ID,
