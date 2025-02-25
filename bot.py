@@ -115,8 +115,9 @@ async def search_song(chat_id, query):
     await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": chat_id,
             "from_chat_id": GROUP_ID,
-            "message_id": song["message_id"]})
-await asyncio.sleep(1)
+            "message_id": song["message_id"]
+    })
+    await asyncio.sleep(1)
 
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
