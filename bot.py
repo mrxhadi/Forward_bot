@@ -88,35 +88,21 @@ async def send_random_song(chat_id):
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
     query = query.lower()
-    results = [song for song in song_database if query in song.get("title", "").lower()]
+    results = [song for song in song_database if query in song.get("title", "بدون عنوان").lower()]
 
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ایجاد لیست انتخابی برای کاربر
-    song_list = "\n".join([f"{song['title']} - {song['performer']}" for song in results])
-    
-    response_text += song_list
-    response_text += "\n\n کدومش؟ بگو تا برات بفرستم."
+    song_list = "\n".join([f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" for song in results])
+
+    response_text = "🎵 **نتایج جستجو:**\n"
+    if song_list:
+        response_text += song_list
+    else:
+        response_text += "❌ هیچ آهنگی یافت نشد!"
 
     await send_message(chat_id, response_text)
-
-            # 📌 اگر آهنگ کاور دارد، ابتدا کاور را ارسال کن
-    if song.get("thumb"):
-                await client.get(f"{BASE_URL}/sendPhoto", params={
-                    "chat_id": chat_id,
-                    "photo": song["thumb"],
-                    "caption": caption_text
-                })
-                await asyncio.sleep(1)  # جلوگیری از محدودیت API
-        
-    await client.get(f"{BASE_URL}/copyMessage", params={
-            "chat_id": chat_id,
-            "from_chat_id": GROUP_ID,
-            "message_id": song["message_id"]
-    })
-    await asyncio.sleep(1)
 
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
