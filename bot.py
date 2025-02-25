@@ -34,7 +34,11 @@ song_database = load_database()
 # 📌 **ارسال پیام به تلگرام**
 async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        await client.get(f"{BASE_URL}/sendMessage", params={"chat_id": chat_id, "text": text})
+        await client.get(f"{BASE_URL}/sendMessage", params={
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML"  # 📌 تنظیم برای پشتیبانی از HTML
+        })
 
 # 📌 **دریافت و پردازش فایل `songs.json`**
 async def handle_document(document, chat_id):
@@ -88,19 +92,18 @@ async def send_random_song(chat_id):
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
     query = query.lower()
-    results = [song for song in song_database if query in song.get("title", "بدون عنوان").lower()]
+    results = [song for song in song_database if query in song.get("title", "").lower()]
 
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    song_list = "\n".join([f"🔹 `{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}`" for song in results])
+    # 📌 ایجاد لیست انتخابی برای کاربر (قابل کپی)
+    song_list = "\n".join([f"<code>{song['title']} - {song['performer']}</code>" for song in results])
 
-    response_text = "🎵 **نتایج جستجو:**\n"
-    if song_list:
-        response_text += song_list
-    else:
-        response_text += "❌ هیچ آهنگی یافت نشد!"
+    response_text = " <b>نتایج جستجو:</b>\n"
+    response_text += song_list
+    response_text += "\n\n یکی از نام‌ها را لمس کرده و ارسال کنید تا آهنگ فوروارد شود."
 
     await send_message(chat_id, response_text)
 
