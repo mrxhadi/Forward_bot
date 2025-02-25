@@ -33,12 +33,17 @@ def save_database(data):
 song_database = load_database()
 
 # 📌 **ارسال پیام به تلگرام**
-async def send_message(chat_id, text):
+async def send_message(chat_id, text, reply_markup=None):
+    params = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    if reply_markup:
+        params["reply_markup"] = json.dumps(reply_markup)
+
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        await client.get(f"{BASE_URL}/sendMessage", params={
-            "chat_id": chat_id,
-            "text": text
-        })
+        await client.get(f"{BASE_URL}/sendMessage", params=params)
 
 # 📌 **دریافت و پردازش فایل `songs.json`**
 async def handle_document(document, chat_id):
@@ -106,22 +111,31 @@ async def send_message(chat_id, text, reply_markup=None):
 async def search_song(chat_id, query):
     query = query.lower().strip()
 
-    # 📌 دریافت عناوین آهنگ‌ها برای مقایسه
-    title_map = {f"{song.get('title', '')} - {song.get('performer', '')}": song for song in song_database}
-    titles = list(title_map.keys())
+    # دریافت بهترین نتایج مشابه
+    results = []
+    for song in song_database:
+        title = f"{song.get('title', '')} - {song.get('performer', '')}".lower()
+        if query in title:
+            results.append(song)
 
-    # 📌 پیدا کردن ۵ نتیجه با بیشترین شباهت
-    closest_matches = difflib.get_close_matches(query, titles, n=5, cutoff=0.4)
-
-    if not closest_matches:
+    # اگر نتیجه‌ای پیدا نشد
+    if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ساخت دکمه‌های شیشه‌ای
+    # انتخاب ۵ نتیجه با بیشترین شباهت
+    closest_matches = difflib.get_close_matches(query, [f"{s['title']} - {s['performer']}" for s in results], n=5, cutoff=0.3)
+    
+    # اگر هنوز نتیجه‌ای پیدا نشد
+    if not closest_matches:
+        await send_message(chat_id, "❌ نتیجه مشابهی یافت نشد!")
+        return
+
+    # ساخت دکمه‌های شیشه‌ای برای ۵ نتیجه برتر
     keyboard = {
         "inline_keyboard": [
-            [{"text": title, "callback_data": f"select_{title_map[title]['message_id']}"}]
-            for title in closest_matches
+            [{"text": title, "callback_data": f"select_{song['message_id']}"}]
+            for song in results if f"{song['title']} - {song['performer']}" in closest_matches
         ]
     }
 
@@ -129,23 +143,25 @@ async def search_song(chat_id, query):
 
     await send_message(chat_id, response_text, reply_markup=keyboard)
 
-# 📌 **پردازش کلیک روی دکمه‌های شیشه‌ای**
+#پردازش دکمه ها
 async def handle_callback(callback_query):
     data = callback_query["data"]
+    chat_id = callback_query["message"]["chat"]["id"]
 
     if data.startswith("select_"):
         message_id = data.split("_")[1]
-        chat_id = callback_query["message"]["chat"]["id"]
 
         async with httpx.AsyncClient() as client:
-            await client.get(f"{BASE_URL}/copyMessage", params={
+            response = await client.get(f"{BASE_URL}/copyMessage", params={
                 "chat_id": chat_id,
                 "from_chat_id": GROUP_ID,
                 "message_id": message_id
             })
 
-        # ارسال پیام تأیید
-        await send_message(chat_id, "✅ آهنگ موردنظر ارسال شد!")
+        if response.json().get("ok"):
+            await send_message(chat_id, "✅ آهنگ موردنظر ارسال شد!")
+        else:
+            await send_message(chat_id, "⚠️ خطایی در ارسال آهنگ رخ داد!")
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
@@ -236,36 +252,36 @@ async def check_new_messages():
                 if data.get("ok"):
                     for update in data["result"]:
                         last_update_id = update["update_id"] + 1
-                        message = update.get("message", {})
-                        chat_id = message.get("chat", {}).get("id")
-                        text = message.get("text", "").strip()
 
-                        if text == "/start":
-                            await send_message(chat_id, " /help از منوی دستورات استفاده کن")
-                        elif "document" in message:
-                            await handle_document(message["document"], chat_id)
-                        elif text.startswith("/search "):
-                            query = text.replace("/search ", "").strip()
-                            await search_song(chat_id, query)
-                        elif any(f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" == text for song in song_database):
-                            selected_song = next((song for song in song_database if f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" == text), None)
-    
-                            if selected_song:
-                                await send_selected_song(chat_id, selected_song)
-                            else:
-                                await send_message(chat_id, "❌ خطا: آهنگ موردنظر در دیتابیس یافت نشد!")
-                        elif text == "/random":
-                            await send_random_song(chat_id)
-                        elif text == "/list":
-                            await send_file_to_user(chat_id)
-                        elif text == "/help":
-                            await send_message(chat_id, " **دستورات ربات:**\n"
-                                " `/random` - سه تا آهنگ رندوم بگیر\n"
-                                " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
-                                " **مثال:**\n"
-                                "`/search wanted`")
-                        elif "audio" in message and str(chat_id) == GROUP_ID:
-                            await forward_music_without_caption(message, message.get("message_thread_id"))
+                        # 📌 پردازش کلیک روی دکمه‌های شیشه‌ای
+                        if "callback_query" in update:
+                            await handle_callback(update["callback_query"])
+
+                        # 📌 پردازش پیام‌های معمولی
+                        elif "message" in update:
+                            message = update["message"]
+                            chat_id = message["chat"]["id"]
+                            text = message.get("text", "").strip()
+
+                            if text == "/start":
+                                await send_message(chat_id, " /help از منوی دستورات استفاده کن")
+                            elif "document" in message:
+                                await handle_document(message["document"], chat_id)
+                            elif text.startswith("/search "):
+                                query = text.replace("/search ", "").strip()
+                                await search_song(chat_id, query)
+                            elif text == "/random":
+                                await send_random_song(chat_id)
+                            elif text == "/list":
+                                await send_file_to_user(chat_id)
+                            elif text == "/help":
+                                await send_message(chat_id, " **دستورات ربات:**\n"
+                                    " `/random` - سه تا آهنگ رندوم بگیر\n"
+                                    " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
+                                    " **مثال:**\n"
+                                    "`/search wanted`")
+                            elif "audio" in message and str(chat_id) == GROUP_ID:
+                                await forward_music_without_caption(message, message.get("message_thread_id"))
 
         except Exception as e:
             print(f"⚠️ خطا: {e}")
