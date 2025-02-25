@@ -89,8 +89,20 @@ async def send_random_song(chat_id):
                 song_database.remove(song)
                 save_database(song_database)
 
+# 📌 **ارسال پیام با دکمه‌های شیشه‌ای**
+async def send_message(chat_id, text, reply_markup=None):
+    params = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    if reply_markup:
+        params["reply_markup"] = json.dumps(reply_markup)
+
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        await client.get(f"{BASE_URL}/sendMessage", params=params)
+
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
-async def search_song(chat_id, query):
 async def search_song(chat_id, query):
     query = query.lower().strip()
 
@@ -113,7 +125,7 @@ async def search_song(chat_id, query):
         ]
     }
 
-    response_text = " نتایج جستجو:\n\n🔹 روی یکی از دکمه‌های زیر کلیک کنید تا آهنگ فوروارد شود."
+    response_text = "🎵 <b>نتایج جستجو:</b>\n\n🔹 روی یکی از دکمه‌های زیر کلیک کنید تا آهنگ فوروارد شود."
 
     await send_message(chat_id, response_text, reply_markup=keyboard)
 
