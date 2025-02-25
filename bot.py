@@ -104,7 +104,7 @@ async def search_song(chat_id, query):
     await send_message(chat_id, response_text)
 
             # 📌 اگر آهنگ کاور دارد، ابتدا کاور را ارسال کن
-            if song.get("thumb"):
+    if song.get("thumb"):
                 await client.get(f"{BASE_URL}/sendPhoto", params={
                     "chat_id": chat_id,
                     "photo": song["thumb"],
