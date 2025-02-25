@@ -94,26 +94,14 @@ async def search_song(chat_id, query):
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    async with httpx.AsyncClient() as client:
-        for song in results:
-            caption_text = f"🎵 {song.get('title', 'نامشخص')}\n👤 {song.get('performer', 'نامشخص')}"
+    # 📌 ایجاد لیست انتخابی برای کاربر
+    song_list = "\n".join([f"`{song['title']} - {song['performer']}`" for song in results])
+    
+    response_text = "🎵 **نتایج جستجو:**\n"
+    response_text += song_list
+    response_text += "\n\n✏️ روی یکی از نام‌ها کلیک کرده و ارسال کنید تا آهنگ فوروارد شود."
 
-            # 📌 بررسی اینکه آیا آهنگ کاور دارد یا نه
-            if not song.get("thumb"):
-                try:
-                    # 📌 دریافت اطلاعات جدید از آهنگ برای گرفتن `thumb`
-                    response = await client.get(f"{BASE_URL}/getFile", params={
-                        "file_id": song["message_id"]
-                    })
-                    file_data = response.json()
-
-                    if file_data.get("ok"):
-                        thumb_data = file_data["result"].get("thumb")
-                        if thumb_data and "file_id" in thumb_data:
-                            song["thumb"] = thumb_data["file_id"]  # ذخیره `file_id` کاور
-                            save_database(song_database)  # ذخیره در دیتابیس
-                except Exception as e:
-                    print(f"⚠️ خطا در دریافت کاور: {e}")
+    await send_message(chat_id, response_text)
 
             # 📌 اگر آهنگ کاور دارد، ابتدا کاور را ارسال کن
             if song.get("thumb"):
@@ -232,6 +220,9 @@ async def check_new_messages():
                         elif text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
+                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
+                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
+                            await send_selected_song(chat_id, selected_song)
                         elif text == "/random":
                             await send_random_song(chat_id)
                         elif text == "/list":
@@ -250,6 +241,15 @@ async def check_new_messages():
             await asyncio.sleep(5)
 
         await asyncio.sleep(3)
+
+# 📌 ارسال آهنگ انتخاب‌شده توسط کاربر
+async def send_selected_song(chat_id, song):
+    async with httpx.AsyncClient() as client:
+        await client.get(f"{BASE_URL}/copyMessage", params={
+            "chat_id": chat_id,
+            "from_chat_id": GROUP_ID,
+            "message_id": song["message_id"]
+        })
 
 # 📌 **اجرای اصلی**
 async def main():
