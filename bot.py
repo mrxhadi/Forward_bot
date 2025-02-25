@@ -111,9 +111,8 @@ async def search_song(chat_id, query):
                     "caption": caption_text
                 })
                 await asyncio.sleep(1)  # جلوگیری از محدودیت API
-
-            # 📌 حالا خود آهنگ را ارسال کن
-        await client.get(f"{BASE_URL}/copyMessage", params={
+        
+    await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": chat_id,
             "from_chat_id": GROUP_ID,
             "message_id": song["message_id"]})
