@@ -201,18 +201,16 @@ async def check_new_messages():
                             await send_message(chat_id, " /help از منوی دستورات استفاده کن")
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
+                        elif text.startswith("/search "):
+                            query = text.replace("/search ", "").strip()
+                            await search_song(chat_id, query)
                         elif any(f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" == text for song in song_database):
                             selected_song = next((song for song in song_database if f"{song.get('title', 'بدون عنوان')} - {song.get('performer', 'ناشناخته')}" == text), None)
-                        if selected_song:
-                            await send_selected_song(chat_id, selected_song)
-                        else:
-                            await send_message(chat_id, "❌ خطا: آهنگ موردنظر در دیتابیس یافت نشد!")
-                        elif text.startswith("/search "):
-                        query = text.replace("/search ", "").strip()
-                            await search_song(chat_id, query)
-                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
-                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
-                            await send_selected_song(chat_id, selected_song)
+    
+                            if selected_song:
+                                await send_selected_song(chat_id, selected_song)
+                            else:
+                                await send_message(chat_id, "❌ خطا: آهنگ موردنظر در دیتابیس یافت نشد!")
                         elif text == "/random":
                             await send_random_song(chat_id)
                         elif text == "/list":
