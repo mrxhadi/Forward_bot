@@ -248,8 +248,7 @@ async def send_selected_song(chat_id, song):
         await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": chat_id,
             "from_chat_id": GROUP_ID,
-            "message_id": song["message_id"]
-        })
+            "message_id": song["message_id"]})
 
 # 📌 **اجرای اصلی**
 async def main():
