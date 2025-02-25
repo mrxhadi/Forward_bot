@@ -97,9 +97,8 @@ async def search_song(chat_id, query):
     # 📌 ایجاد لیست انتخابی برای کاربر
     song_list = "\n".join([f"`{song['title']} - {song['performer']}`" for song in results])
     
-    response_text = "🎵 **نتایج جستجو:**\n"
     response_text += song_list
-    response_text += "\n\n✏️ روی یکی از نام‌ها کلیک کرده و ارسال کنید تا آهنگ فوروارد شود."
+    response_text += "\n\n کدومش؟ بگو تا برات بفرستم."
 
     await send_message(chat_id, response_text)
 
