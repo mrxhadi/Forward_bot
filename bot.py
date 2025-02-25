@@ -187,6 +187,9 @@ async def check_new_messages():
                             await send_message(chat_id, " /help از منوی دستورات استفاده کن")
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
+                        elif text.startswith("/search "):
+                            query = text.replace("/search ", "").strip()
+                            await search_song(chat_id, query)
                         elif text == "/random":
                             await send_random_song(chat_id)
                         elif text == "/list":
