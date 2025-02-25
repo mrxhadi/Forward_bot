@@ -98,6 +98,13 @@ async def search_song(chat_id, query):
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
+    # 📌 فقط ۵۰ نتیجه اول نمایش داده شود
+    results = results[:50]
+
+    song_list = "\n".join([f"<code>{song['title']} - {song['performer']}</code>" for song in results])
+    response_text = "🎵 <b>نتایج جستجو:</b>\n" + song_list
+    await send_message(chat_id, response_text)
+
     # 📌 ایجاد لیست انتخابی برای کاربر (قابل کپی)
     song_list = "\n".join([f"<code>{song['title']} - {song['performer']}</code>" for song in results])
 
