@@ -98,20 +98,19 @@ async def search_song(chat_id, query):
         for song in results:
             caption_text = f"🎵 {song.get('title', 'نامشخص')}\n👤 {song.get('performer', 'نامشخص')}"
 
-            # 📌 بررسی اینکه آیا آهنگ قبلاً کاور دارد یا نه
+            # 📌 بررسی اینکه آیا آهنگ کاور دارد یا نه
             if not song.get("thumb"):
                 try:
-                    # 📌 دریافت اطلاعات پیام برای گرفتن `thumb`
-                    response = await client.get(f"{BASE_URL}/getMessage", params={
-                        "chat_id": GROUP_ID,
-                        "message_id": song["message_id"]
+                    # 📌 دریافت اطلاعات جدید از آهنگ برای گرفتن `thumb`
+                    response = await client.get(f"{BASE_URL}/getFile", params={
+                        "file_id": song["message_id"]
                     })
-                    message_data = response.json()
+                    file_data = response.json()
 
-                    if message_data.get("ok") and "audio" in message_data["result"]:
-                        thumb_data = message_data["result"]["audio"].get("thumb")
+                    if file_data.get("ok"):
+                        thumb_data = file_data["result"].get("thumb")
                         if thumb_data and "file_id" in thumb_data:
-                            song["thumb"] = thumb_data["file_id"]  # ذخیره `file_id`
+                            song["thumb"] = thumb_data["file_id"]  # ذخیره `file_id` کاور
                             save_database(song_database)  # ذخیره در دیتابیس
                 except Exception as e:
                     print(f"⚠️ خطا در دریافت کاور: {e}")
@@ -123,7 +122,7 @@ async def search_song(chat_id, query):
                     "photo": song["thumb"],
                     "caption": caption_text
                 })
-                await asyncio.sleep(1)  # تأخیر کوتاه برای جلوگیری از محدودیت API
+                await asyncio.sleep(1)  # جلوگیری از محدودیت API
 
             # 📌 حالا خود آهنگ را ارسال کن
             await client.get(f"{BASE_URL}/copyMessage", params={
