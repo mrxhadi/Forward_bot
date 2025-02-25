@@ -106,12 +106,14 @@ async def search_song(chat_id, query):
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ایجاد لیست انتخابی برای کاربر (✅ قابل کپی در تلگرام)
-    song_list = "\n".join([f"{song['title']} - {song['performer']}" for song in results])
+    # 📌 ارسال نتایج به صورت پیام‌های جداگانه
+    await send_message(chat_id, "🎵 **نتایج جستجو:**")
 
-    response_text = f"🎵 **نتایج جستجو:**\n\n```\n{song_list}\n```\n✏️ **یکی از نام‌ها را کپی و ارسال کنید تا آهنگ فوروارد شود.**"
+    for song in results:
+        response_text = f"{song['title']} - {song['performer']}"
+        await send_message(chat_id, response_text)
 
-    await send_message(chat_id, response_text)
+    await send_message(chat_id, "✏️ **یکی از نام‌ها را کپی و ارسال کنید تا آهنگ فوروارد شود.**")
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
