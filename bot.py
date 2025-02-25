@@ -5,6 +5,7 @@ import asyncio
 import httpx
 from datetime import datetime
 import pytz
+import difflib
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
@@ -90,29 +91,30 @@ async def send_random_song(chat_id):
                 save_database(song_database)
 
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
+
+# 📌 جستجو در دیتابیس و ارسال ۵ نتیجه برتر بر اساس بیشترین شباهت
 async def search_song(chat_id, query):
     query = query.lower()
-    results = [song for song in song_database if query in song.get("title", "").lower()]
+    
+    # فیلتر کردن آهنگ‌هایی که شامل متن جستجو هستند
+    results = [(song, difflib.SequenceMatcher(None, query, song.get("title", "").lower()).ratio()) for song in song_database]
 
-    if not results:
+    # مرتب‌سازی بر اساس شباهت (بیشترین شباهت در ابتدا)
+    results = sorted(results, key=lambda x: x[1], reverse=True)
+
+    # گرفتن فقط ۵ مورد برتر
+    top_results = results[:5]
+
+    if not top_results or top_results[0][1] < 0.3:  # اگر هیچ موردی بالای ۳۰٪ شباهت نداشت
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 فقط ۵۰ نتیجه اول نمایش داده شود
-    results = results[:50]
+    # ساخت لیست نمایش در تلگرام (به همراه `code` برای کپی شدن)
+    song_list = "\n".join([f"<code>{song['title']} - {song.get('performer', 'Unknown')}</code>" for song, _ in top_results])
 
-    song_list = "\n".join([f"<code>{song['title']} - {song['performer']}</code>" for song in results])
-    response_text = "🎵 <b>نتایج جستجو:</b>\n" + song_list
-    await send_message(chat_id, response_text)
+    response_text = f"🎵 <b>۵ نتیجه برتر جستجو:</b>\n{song_list}\n\n✏️ روی یکی از نام‌ها کلیک کرده و ارسال کنید تا آهنگ فوروارد شود."
 
-    # 📌 ایجاد لیست انتخابی برای کاربر (قابل کپی)
-    song_list = "\n".join([f"<code>{song['title']} - {song['performer']}</code>" for song in results])
-
-    response_text = " <b>نتایج جستجو:</b>\n"
-    response_text += song_list
-    response_text += "\n\n یکی از نام‌ها را لمس کرده و ارسال کنید تا آهنگ فوروارد شود."
-
-    await send_message(chat_id, response_text)
+    await send_message(chat_id, response_text, parse_mode="HTML")
 
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
