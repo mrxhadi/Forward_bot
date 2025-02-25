@@ -85,6 +85,24 @@ async def send_random_song(chat_id):
                 song_database.remove(song)
                 save_database(song_database)
 
+# 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
+async def search_song(chat_id, query):
+    query = query.lower()
+    results = [song for song in song_database if query in song.get("title", "").lower()]
+
+    if not results:
+        await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
+        return
+
+    async with httpx.AsyncClient() as client:
+        for song in results:
+            await client.get(f"{BASE_URL}/copyMessage", params={
+                "chat_id": chat_id,
+                "from_chat_id": GROUP_ID,
+                "message_id": song["message_id"]
+            })
+            await asyncio.sleep(1)
+
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
