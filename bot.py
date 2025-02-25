@@ -35,10 +35,9 @@ song_database = load_database()
 # 📌 **ارسال پیام به تلگرام**
 async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        await client.post(f"{BASE_URL}/sendMessage", json={
+        await client.get(f"{BASE_URL}/sendMessage", params={
             "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML"
+            "text": text
         })
 
 # 📌 **دریافت و پردازش فایل `songs.json`**
@@ -93,29 +92,32 @@ async def send_random_song(chat_id):
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 
 # 📌 جستجو در دیتابیس و ارسال ۵ نتیجه برتر بر اساس بیشترین شباهت
+
+# 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
+
+# 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
     query = query.lower()
     
-    # فیلتر کردن آهنگ‌هایی که شامل متن جستجو هستند
-    results = [(song, difflib.SequenceMatcher(None, query, song.get("title", "").lower()).ratio()) for song in song_database]
+    # 📌 پیدا کردن ۵ نتیجه با بیشترین شباهت
+    titles = [song.get("title", "").lower() for song in song_database]
+    closest_matches = difflib.get_close_matches(query, titles, n=5, cutoff=0.3)
 
-    # مرتب‌سازی بر اساس شباهت (بیشترین شباهت در ابتدا)
-    results = sorted(results, key=lambda x: x[1], reverse=True)
+    results = [song for song in song_database if song.get("title", "").lower() in closest_matches]
 
-    # گرفتن فقط ۵ مورد برتر
-    top_results = results[:5]
-
-    if not top_results or top_results[0][1] < 0.3:  # اگر هیچ موردی بالای ۳۰٪ شباهت نداشت
+    if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # ساخت لیست نمایش در تلگرام (به همراه `code` برای کپی شدن)
-    song_list = "\n".join([f"<code>{song['title']} - {song.get('performer', 'Unknown')}</code>" for song, _ in top_results])
+    # 📌 ایجاد لیست انتخابی برای کاربر (با قابلیت کپی)
+    song_list = "\n".join([f"\u200B{song['title']} - {song['performer']}" for song in results])
 
-    response_text = f"🎵 <b>۵ نتیجه برتر جستجو:</b>\n{song_list}\n\n✏️ روی یکی از نام‌ها کلیک کرده و ارسال کنید تا آهنگ فوروارد شود."
+    response_text = "🎵 **نتایج جستجو:**\n"
+    response_text += song_list
+    response_text += "\n\n✏️ یکی از نام‌ها را **کپی و ارسال** کنید تا آهنگ فوروارد شود."
 
-    await send_message(chat_id, response_text, parse_mode="HTML")
-
+    await send_message(chat_id, response_text)
+    
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
