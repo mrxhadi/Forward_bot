@@ -35,10 +35,10 @@ song_database = load_database()
 # 📌 **ارسال پیام به تلگرام**
 async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        await client.get(f"{BASE_URL}/sendMessage", params={
+        await client.post(f"{BASE_URL}/sendMessage", json={
             "chat_id": chat_id,
             "text": text,
-            "parse_mode": "HTML"  # ✅ پشتیبانی از HTML بدون تغییر متد
+            "parse_mode": "HTML"
         })
 
 # 📌 **دریافت و پردازش فایل `songs.json`**
