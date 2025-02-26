@@ -135,20 +135,32 @@ async def search_song(chat_id, query):
 
 # 📌 ارسال آهنگ انتخابی توسط کاربر
 async def send_selected_song(chat_id, song):
-    async with httpx.AsyncClient() as client:
-        # استفاده از GET برای ارسال پیام
-        response = await client.get(f"{BASE_URL}/copyMessage", params={
-            "chat_id": chat_id,
-            "from_chat_id": GROUP_ID,
-            "message_id": song["message_id"]
-        })
+    try:
+        # اطمینان از صحت message_id
+        message_id = song.get("message_id")
+        if not message_id:
+            print(f"⚠️ خطا: `message_id` برای آهنگ {song['title']} یافت نشد.")
+            return
+        
+        print(f"ارسال آهنگ: {song['title']} - {song['performer']}")  # نمایش نام آهنگ
+
+        # ارسال آهنگ به کاربر
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{BASE_URL}/copyMessage", params={
+                "chat_id": chat_id,
+                "from_chat_id": GROUP_ID,
+                "message_id": message_id
+            })
         
         response_data = response.json()
+
         if response_data.get("ok"):
-            print(f"✅ آهنگ {song['title']} با موفقیت ارسال شد.")
+            print(f"آهنگ {song['title']} با موفقیت ارسال شد!")
         else:
             print(f"⚠️ خطا در ارسال آهنگ {song['title']}: {response_data}")
-    
+    except Exception as e:
+        print(f"⚠️ خطا در ارسال آهنگ: {e}")
+        
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
@@ -184,57 +196,39 @@ async def check_new_messages():
     last_update_id = None
     while True:
         try:
-            # ارسال درخواست GET برای دریافت پیام‌های جدید
-            print("در حال ارسال درخواست برای دریافت پیام‌های جدید...")
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
                 response = await client.get(f"{BASE_URL}/getUpdates", params={"offset": last_update_id})
-                print(f"پاسخ دریافتی: {response.text}")
                 data = response.json()
 
-                # بررسی پاسخ
-                if not data.get("ok"):
-                    print("خطا در دریافت داده‌ها: ", data)
-                    continue  # ادامه حلقه در صورت دریافت خطا
+                if data.get("ok"):
+                    for update in data["result"]:
+                        last_update_id = update["update_id"] + 1
+                        message = update.get("message", {})
+                        chat_id = message.get("chat", {}).get("id")
+                        text = message.get("text", "").strip()
 
-                # پردازش نتایج
-                print("در حال پردازش نتایج...")
-                for update in data["result"]:
-                    print(f"پردازش آپدیت جدید: {update}")
+                        # لاگ پیام دریافتی
+                        print(f"پیام دریافت شده: {text}")
 
-                    last_update_id = update["update_id"] + 1
-                    message = update.get("message", {})
-                    chat_id = message.get("chat", {}).get("id")
-                    text = message.get("text", "").strip()
+                        # اگر پیام جستجو باشد، جستجو را انجام بده
+                        if text.startswith("/search "):
+                            query = text.replace("/search ", "").strip()
+                            print(f"جستجو با عبارت: {query}")  # لاگ عبارت جستجو
+                            await search_song(chat_id, query)
 
-                    # نمایش لاگ برای هر دستور
-                    print(f"پیام دریافت شده: {text}")
-
-                    if text == "/start":
-                        print("دستور /start دریافت شد.")
-                        await send_message(chat_id, "/help از منوی دستورات استفاده کن")
-                    elif "document" in message:
-                        print("دستور ارسال فایل دریافت شد.")
-                        await handle_document(message["document"], chat_id)
-                    elif text.startswith("/search "):
-                        print(f"دستور جستجو با عبارت: {text} دریافت شد.")
-                        query = text.replace("/search ", "").strip()
-                        await search_song(chat_id, query)
-                    elif text == "/random":
-                        print("دستور /random دریافت شد.")
-                        await send_random_song(chat_id)
-                    elif text == "/list":
-                        print("دستور /list دریافت شد.")
-                        await send_file_to_user(chat_id)
-                    elif text == "/help":
-                        print("دستور /help دریافت شد.")
-                        await send_message(chat_id, " **دستورات ربات:**\n"
-                            " `/random` - سه تا آهنگ رندوم بگیر\n"
-                            " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
-                            " **مثال:**\n"
-                            "`/search wanted`")
-                    elif "audio" in message and str(chat_id) == GROUP_ID:
-                        print(f"ارسال آهنگ به تاپیک گروه: {chat_id}")
-                        await forward_music_without_caption(message, message.get("message_thread_id"))
+                        # بررسی اینکه آیا نام آهنگ انتخابی درست است
+                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
+                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
+                            print(f"آهنگ انتخاب‌شده: {selected_song['title']} - {selected_song['performer']}")  # لاگ آهنگ انتخاب‌شده
+                            await send_selected_song(chat_id, selected_song)
+                        
+                        # سایر دستورات
+                        elif text == "/random":
+                            await send_random_song(chat_id)
+                        elif text == "/list":
+                            await send_file_to_user(chat_id)
+                        elif text == "/help":
+                            await send_message(chat_id, "دستورات ربات:\n/random - سه تا آهنگ رندوم بگیر\n/search - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n/help - نمایش دستورات")
 
         except Exception as e:
             print(f"⚠️ خطا در پردازش پیام‌ها: {e}")
