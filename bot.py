@@ -88,6 +88,14 @@ async def send_random_song(chat_id):
     async with httpx.AsyncClient() as client:
         for song in songs:
             try:
+                # بررسی اینکه مقدار `title` و `performer` در دیتابیس وجود دارد
+                title = song.get("title", "نامشخص")
+                performer = song.get("performer", "نامشخص")
+
+                if "message_id" not in song:
+                    print(f"⚠️ خطا: پیام ایدی در آهنگ '{title}' موجود نیست.")
+                    continue  # این آهنگ را رد کن
+
                 response = await client.get(f"{BASE_URL}/copyMessage", params={
                     "chat_id": chat_id,
                     "from_chat_id": GROUP_ID,
