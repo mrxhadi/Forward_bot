@@ -15,16 +15,20 @@ async def search_song_lyrics(query):
         response = await client.get(search_url, headers=headers)
         data = response.json()
 
-        if "response" in data and "hits" in data["response"] and len(data["response"]["hits"]) > 0:
-            song_info = data["response"]["hits"][0]["result"]
-            song_title = song_info.get("title", "نامشخص")
-            song_artist = song_info.get("primary_artist", {}).get("name", "نامشخص")
-            song_url = song_info.get("url", "")
+        # بررسی وجود داده‌های موردنظر در پاسخ API
+        if data.get("response") and data["response"].get("hits") and len(data["response"]["hits"]) > 0:
+            song_info = data["response"]["hits"][0].get("result", {})
 
-            return f"🎵 **{song_title}** - {song_artist}\n🔗 [متن آهنگ در جینیس]({song_url})"
+            # جلوگیری از خطای `title` با استفاده از `get`
+            song_title = song_info.get("title", "🎵 نامشخص")
+            song_artist = song_info.get("primary_artist", {}).get("name", "🎤 نامشخص")
+            song_url = song_info.get("url", "❌ لینک موجود نیست!")
+
+            return f"🎵 **{song_title}** - {song_artist}\n🔗 [مشاهده متن آهنگ]({song_url})"
+        
         else:
-            return "❌ متن آهنگ پیدا نشد!"
-
+            return "❌ متن آهنگ پیدا نشد! لطفاً نام آهنگ را دقیق‌تر وارد کنید."
+            
 # 📌 دریافت متن آهنگ از URL صفحه
 async def fetch_lyrics_from_url(url):
     async with httpx.AsyncClient() as client:
