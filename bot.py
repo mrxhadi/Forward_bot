@@ -107,21 +107,27 @@ async def send_random_song(chat_id):
 
 # 📌 **جستجو در دیتابیس**
 async def search_song(chat_id, query):
-    query = query.lower()
-    matches = get_close_matches(query, [song["title"].lower() for song in song_database], n=5, cutoff=0.4)
+    query = query.lower().strip()
+    results = sorted(
+        [song for song in song_database if song.get("title") and query in song["title"].lower()],
+        key=lambda x: difflib.SequenceMatcher(None, query, x.get("title", "").lower()).ratio(),
+        reverse=True
+    )
 
-    results = [song for song in song_database if song["title"].lower() in matches]
-    
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
+    # 📌 ارسال حداکثر ۵ نتیجه برتر
+    results = results[:5]
+
     response_text = "نتایج جستجو:\n"
     for song in results:
-        response_text += f"{song['title']} - {song['performer']}\n"
+        title = song.get("title", "نامشخص")
+        performer = song.get("performer", "نامشخص")
+        response_text += f"{title} - {performer}\n"
 
-    response_text += "\nاسم آهنگ رو کپی و ارسال کن تا آهنگو بفرستم."
-    await send_message(chat_id, response_text)
+    await send_message(chat_id, response_text + "\nاسمو کپی کن و بهم بده تا آهنگو بفرستم.")
 
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
@@ -169,64 +175,39 @@ async def check_new_messages():
                         chat_id = message.get("chat", {}).get("id")
                         text = message.get("text", "").strip()
 
-                        # بررسی دستور `/start`
-                        if text == "/start":
-                            await send_message(chat_id, " /help از منوی دستورات استفاده کن")
-
-                        # بررسی ارسال فایل دیتابیس
-                        elif "document" in message:
-                            await handle_document(message["document"], chat_id)
-
-                        # بررسی جستجو
-                        elif text.startswith("/search "):
+                        # ✅ بررسی دستور `/search`
+                        if text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
+                            continue
 
-                        # بررسی انتخاب آهنگ از نتایج
-                        elif text in [f"{song.get('title', 'نامشخص')} - {song.get('performer', 'نامشخص')}" for song in song_database]:
-                            selected_song = next(
-                                (song for song in song_database if f"{song.get('title', 'نامشخص')} - {song.get('performer', 'نامشخص')}" == text),
-                                None
-                            )
-                            if selected_song:
-                                await send_selected_song(chat_id, selected_song)
-                            else:
-                                await send_message(chat_id, "⚠️ خطا: آهنگ انتخاب‌شده در دیتابیس وجود ندارد.")
-
-                        # بررسی دریافت دستور `/random`
+                        # ✅ بررسی دستورات دیگر
+                        elif text == "/start":
+                            await send_message(chat_id, "/help از منوی دستورات استفاده کن")
                         elif text == "/random":
                             await send_random_song(chat_id)
-
-                        # بررسی دریافت دستور `/list`
                         elif text == "/list":
                             await send_file_to_user(chat_id)
-
-                        # بررسی دریافت دستور `/help`
                         elif text == "/help":
-                            await send_message(chat_id, " **دستورات ربات:**\n"
-                                " `/random` - سه تا آهنگ رندوم بگیر\n"
-                                " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
-                                " **مثال:**\n"
-                                "`/search wanted`")
-
-                        # بررسی ارسال آهنگ جدید در گروه
+                            await send_message(chat_id, "📌 دستورات ربات:\n"
+                                                         "🎵 `/random` - سه تا آهنگ رندوم بگیر\n"
+                                                         "🔍 `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
+                                                         "📌 **مثال:** `/search wanted`")
+                        elif "document" in message:
+                            await handle_document(message["document"], chat_id)
+                        
+                        # ✅ بررسی ارسال آهنگ در گروه
                         elif "audio" in message and str(chat_id) == GROUP_ID:
-                            audio = message.get("audio")
-                            if not audio:
-                                print("⚠️ خطا: پیام حاوی فایل صوتی نیست.")
-                                continue
-
-                            title = audio.get("title")
-                            performer = audio.get("performer")
-
-                            if not title or not performer:
-                                print(f"⚠️ خطا: اطلاعات ناقص برای آهنگ دریافت شد. پیام: {message}")
-                                continue
-
                             await forward_music_without_caption(message, message.get("message_thread_id"))
+                        
+                        # ✅ بررسی ارسال نام آهنگ توسط کاربر
+                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
+                            selected_song = next((song for song in song_database if f"{song['title']} - {song['performer']}" == text), None)
+                            if selected_song:
+                                await send_selected_song(chat_id, selected_song)
 
         except Exception as e:
-            print(f"⚠️ خطا در دریافت پیام جدید: {e}")
+            print(f"⚠️ خطا: {e}")
             await asyncio.sleep(5)
 
         await asyncio.sleep(3)
