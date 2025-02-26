@@ -242,9 +242,12 @@ async def check_new_messages():
                             await search_song(chat_id, query)
 
                         # 📌 **بررسی ارسال اسم آهنگ برای دریافت آن**
-                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
-                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
+                        elif any(f"{song.get('title', 'بدون نام')} - {song.get('performer', 'ناشناخته')}" == text for song in song_database):
+                            selected_song = next((song for song in song_database if f"{song.get('title', 'بدون نام')} - {song.get('performer', 'ناشناخته')}" == text), None)
+                        if selected_song:
                             await send_selected_song(chat_id, selected_song)
+                        else:
+                            await send_message(chat_id, "⚠️ مشکلی در یافتن آهنگ پیش آمد. لطفاً دوباره تلاش کنید.")
 
                         # 📌 **بررسی ارسال آهنگ جدید و فوروارد آن در گروه**
                         elif "audio" in message and str(chat_id) == GROUP_ID:
@@ -258,12 +261,21 @@ async def check_new_messages():
 
 # 📌 ارسال آهنگ انتخاب‌شده توسط کاربر
 async def send_selected_song(chat_id, song):
+    message_id = song.get("message_id")  # دریافت آی‌دی پیام آهنگ
+
+    if not message_id:
+        await send_message(chat_id, "⚠️ خطا: اطلاعات آهنگ ناقص است. ارسال ممکن نیست.")
+        return
+
     async with httpx.AsyncClient() as client:
-        await client.get(f"{BASE_URL}/copyMessage", params={
+        response = await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": chat_id,
             "from_chat_id": GROUP_ID,
-            "message_id": song["message_id"]
+            "message_id": message_id
         })
+
+        if not response.json().get("ok"):
+            await send_message(chat_id, "⚠️ مشکلی در ارسال آهنگ پیش آمد. لطفاً دوباره تلاش کنید.")
 
 # 📌 **اجرای اصلی**
 async def main():
