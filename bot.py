@@ -106,25 +106,41 @@ async def send_random_song(chat_id):
             await asyncio.sleep(1)  # جلوگیری از بلاک شدن توسط تلگرام
 
 # 📌 **جستجو در دیتابیس**
+import difflib
+
+# 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
     query = query.lower()
     
-    # 📌 مقایسه شباهت عناوین آهنگ‌ها با ورودی کاربر
-    song_titles = [song["title"].lower() for song in song_database]
-    matches = difflib.get_close_matches(query, song_titles, n=5, cutoff=0.4)
-
-    results = [song for song in song_database if song["title"].lower() in matches]
-
+    # مقایسه شباهت
+    results = [
+        song for song in song_database 
+        if query in song.get("title", "").lower()
+    ]
+    
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ایجاد لیست مرتب‌شده از نزدیک‌ترین تطابق‌ها
-    response_text = "نتایج جستجو:\n\n"
-    for song in results:
-        response_text += f"{song['title']} - {song['performer']}\n"
+    # 📌 محدود کردن نتایج به پنج تا
+    results = results[:5]
+    
+    # محاسبه شباهت برای هر آهنگ و مرتب کردن بر اساس شباهت
+    results_sorted = sorted(
+        results, 
+        key=lambda song: difflib.SequenceMatcher(None, query, song["title"].lower()).ratio(), 
+        reverse=True
+    )
+    
+    # ارسال نتایج به صورت جداگانه
+    for song in results_sorted:
+        title = song.get("title", "نامشخص")
+        performer = song.get("performer", "نامشخص")
+        await send_message(chat_id, f"🎵 {title} - {performer}")
+        await asyncio.sleep(1)  # جلوگیری از ارسال سریع و محدودیت‌های API
 
-    await send_message(chat_id, response_text.strip())
+    # بعد از ارسال همه نتایج
+    await send_message(chat_id, "✏️ اسمو کپی کن و بفرست تا اهنگو برات بفرستم.")
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
