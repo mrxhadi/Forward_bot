@@ -68,18 +68,21 @@ async def send_random_song(chat_id):
 
     async with httpx.AsyncClient() as client:
         for song in songs:
-            # چک کردن اینکه آیا مقدار title و performer در آهنگ وجود دارد
-            title = song.get("title", "نامشخص")
-            performer = song.get("performer", "نامشخص")
-            message_id = song.get("message_id")
-
-            if not message_id:
-                print(f"⚠️ خطا: پیام ایدی در آهنگ '{title}' موجود نیست. از دیتابیس حذف شد.")
-                song_database.remove(song)
-                save_database(song_database)
-                continue  # آهنگ بعدی بررسی شود
-
             try:
+                # چک کردن اینکه مقدار title و performer در آهنگ وجود دارد
+                title = song.get("title", "نامشخص")
+                performer = song.get("performer", "نامشخص")
+                message_id = song.get("message_id")
+
+                if not message_id:
+                    print(f"⚠️ خطا: پیام ایدی در آهنگ '{title}' موجود نیست. از دیتابیس حذف شد.")
+                    song_database.remove(song)
+                    save_database(song_database)
+                    continue  # آهنگ بعدی بررسی شود
+
+                if title == "نامشخص":
+                    print(f"⚠️ هشدار: مقدار `title` برای این آهنگ در دیتابیس موجود نیست → {song}")
+
                 response = await client.get(f"{BASE_URL}/copyMessage", params={
                     "chat_id": chat_id,
                     "from_chat_id": GROUP_ID,
@@ -95,6 +98,8 @@ async def send_random_song(chat_id):
                         song_database.remove(song)
                         save_database(song_database)
 
+            except KeyError as e:
+                print(f"❌ خطای KeyError: کلید {e} در این آهنگ موجود نیست → {song}")
             except Exception as e:
                 print(f"⚠️ خطا در ارسال آهنگ تصادفی: {e}")
 
