@@ -6,6 +6,7 @@ import httpx
 from datetime import datetime
 import pytz
 import difflib
+from genius import search_song_lyrics
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
@@ -218,46 +219,49 @@ async def check_new_messages():
                         chat_id = message.get("chat", {}).get("id")
                         text = message.get("text", "").strip()
 
-                        # 📌 **دریافت دستور `/start` و نمایش راهنما**
+                        # 📌 دستور /start
                         if text == "/start":
-                            await send_message(chat_id, "از منوی دستورات استفاده کن \n\n🔍 برای جستجوی آهنگ از دستور `/search اسم‌آهنگ` استفاده کن.")
+                            await send_message(chat_id, " /help از منوی دستورات استفاده کن")
 
-                        # 📌 **دریافت فایل دیتابیس و بروزرسانی**
+                        # 📌 دریافت فایل دیتابیس
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
 
-                        # 📌 **جستجو در دیتابیس با `/search`**
+                        # 📌 دستور جستجوی آهنگ در دیتابیس
                         elif text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
 
-                        # 📌 **بررسی ارسال نام آهنگ از نتایج جستجو و فوروارد آن**
-                        elif any(f"{song['title']} - {song['performer']}" == text for song in song_database):
-                            selected_song = next((song for song in song_database if f"{song['title']} - {song['performer']}" == text), None)
-                            if selected_song:
-                                await send_selected_song(chat_id, selected_song)
+                        # 📌 ارسال آهنگ بر اساس انتخاب کاربر
+                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
+                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
+                            await send_selected_song(chat_id, selected_song)
 
-                        # 📌 **ارسال آهنگ تصادفی با `/random`**
+                        # 📌 دستور ارسال آهنگ رندوم
                         elif text == "/random":
                             await send_random_song(chat_id)
 
-                        # 📌 **ارسال فایل دیتابیس با `/list`**
+                        # 📌 ارسال فایل دیتابیس
                         elif text == "/list":
                             await send_file_to_user(chat_id)
 
-                        # 📌 **نمایش راهنما با `/help`**
+                        # 📌 نمایش راهنمای دستورات
                         elif text == "/help":
-                            await send_message(
-                                chat_id,
-                                "**🎵 دستورات ربات:**\n"
-                                "🔀 `/random` - دریافت ۳ آهنگ تصادفی\n"
-                                "🔍 `/search` - جستجوی آهنگ، مثال:\n"
-                                "   `/search Wanted`\n"
-                                "📂 `/list` - دریافت لیست آهنگ‌ها\n"
-                                "❓ `/help` - نمایش راهنما"
-                            )
+                            await send_message(chat_id, " **دستورات ربات:**\n"
+                                " `/random` - سه تا آهنگ رندوم بگیر\n"
+                                " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
+                                " `/lyrics` - متن آهنگ رو بگیر از جینیس\n"
+                                " **مثال:**\n"
+                                "`/search Wanted`  \n"
+                                "`/lyrics Dele Man - Tataloo`")
 
-                        # 📌 **بررسی ارسال آهنگ جدید و فوروارد آن در گروه**
+                        # 📌 دریافت متن آهنگ از جینیس
+                        elif text.startswith("/lyrics "):
+                            query = text.replace("/lyrics ", "").strip()
+                            lyrics = await search_song_lyrics(query)
+                            await send_message(chat_id, lyrics)
+
+                        # 📌 بررسی ارسال آهنگ جدید و فوروارد آن در گروه
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
