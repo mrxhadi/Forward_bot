@@ -76,24 +76,37 @@ async def send_file_to_user(chat_id):
     else:
         await send_message(chat_id, "⚠️ هنوز هیچ آهنگی ذخیره نشده!")
 
-# 📌 **ارسال ۳ آهنگ تصادفی در پیوی**
+# 📌 ارسال ۳ آهنگ تصادفی در پیوی
 async def send_random_song(chat_id):
     if not song_database:
         await send_message(chat_id, "⚠️ دیتابیس خالی است!")
         return
 
+    # انتخاب تصادفی ۳ آهنگ از دیتابیس
     songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
+
     async with httpx.AsyncClient() as client:
         for song in songs:
-            response = await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": chat_id,
-                "from_chat_id": GROUP_ID,
-                "message_id": song["message_id"]
-            })
+            try:
+                response = await client.get(f"{BASE_URL}/copyMessage", params={
+                    "chat_id": chat_id,
+                    "from_chat_id": GROUP_ID,
+                    "message_id": song["message_id"]
+                })
+                
+                response_data = response.json()
+                if not response_data.get("ok"):
+                    print(f"⚠️ خطا در ارسال آهنگ {song['message_id']}: {response_data}")
+                    
+                    # اگر پیام پیدا نشد، از دیتابیس حذف شود
+                    if response_data.get("error_code") == 400 and "message to copy not found" in response_data.get("description", ""):
+                        song_database.remove(song)
+                        save_database(song_database)
 
-            if not response.json().get("ok"):
-                song_database.remove(song)
-                save_database(song_database)
+            except Exception as e:
+                print(f"⚠️ خطا در ارسال آهنگ تصادفی: {e}")
+
+            await asyncio.sleep(1)  # جلوگیری از محدودیت API
 
 # 📌 **ارسال پیام**
 async def send_message(chat_id, text, reply_markup=None):
