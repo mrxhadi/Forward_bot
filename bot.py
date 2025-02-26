@@ -262,11 +262,15 @@ async def check_new_messages():
 
                         # ✅ نمایش راهنما
                         elif text == "/help":
-                            await send_message(chat_id, " **دستورات ربات:**\n"
-                                " /random - سه تا آهنگ رندوم بگیر\n"
-                                " /search - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
-                                " مثال:\n"
-                                " /search wanted")
+                             help_text = (
+                             "دستورات ربات:\n"
+                             "/random - سه تا آهنگ رندوم بگیر\n"
+                             "/search [اسم آهنگ] - جستجوی آهنگ\n"
+                             "/lyrics [اسم آهنگ] - دریافت متن آهنگ\n\n"
+                             "مثال:\n"
+                             "/search wanted"
+    )
+    await send_message(chat_id, help_text)
 
                         # ✅ بررسی ارسال آهنگ جدید و فوروارد آن در گروه
                         elif "audio" in message and str(chat_id) == GROUP_ID:
