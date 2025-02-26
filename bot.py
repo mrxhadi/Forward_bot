@@ -219,36 +219,41 @@ async def check_new_messages():
                         chat_id = message.get("chat", {}).get("id")
                         text = message.get("text", "").strip()
 
-                        # 📌 **دریافت متن آهنگ از Genius**
-                        if text.startswith("/lyrics "):  
-                            song_query = text.replace("/lyrics ", "").strip()
-                            lyrics_result = search_song_lyrics(song_query)
-                            await send_message(chat_id, lyrics_result, parse_mode="Markdown")
+                        # 📌 **دستور `/start` و خوشامدگویی**
+                        if text == "/start":
+                            await send_message(chat_id, "👋 از منوی دستورات استفاده کن!\n📢 @HTG_music")
 
-                        # 📌 **ارسال سه آهنگ رندوم**
-                        elif text == "/random":
-                            await send_random_song(chat_id)
+                        # 📌 **دریافت فایل `songs.json` برای بروزرسانی دیتابیس**
+                        elif "document" in message:
+                            await handle_document(message["document"], chat_id)
 
-                        # 📌 **جستجو در دیتابیس**
+                        # 📌 **جستجو در دیتابیس آهنگ‌ها**
                         elif text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
 
-                        # 📌 **ارسال لیست آهنگ‌ها**
+                        # 📌 **دریافت متن آهنگ از Genius API**
+                        elif text.startswith("/lyrics "):
+                            song_query = text.replace("/lyrics ", "").strip()
+                            lyrics_result = await search_song_lyrics(song_query)
+                            await send_message(chat_id, lyrics_result)
+
+                        # 📌 **ارسال ۳ آهنگ تصادفی در پیوی**
+                        elif text == "/random":
+                            await send_random_song(chat_id)
+
+                        # 📌 **ارسال فایل `songs.json`**
                         elif text == "/list":
                             await send_file_to_user(chat_id)
 
-                        # 📌 **نمایش راهنمای دستورات**
+                        # 📌 **راهنما (`/help`)**
                         elif text == "/help":
-                            help_text = (
-                                "**📌 دستورات ربات:**\n"
-                                "🎵 `/random` - دریافت ۳ آهنگ تصادفی\n"
-                                "🔍 `/search [نام آهنگ]` - جستجوی آهنگ\n"
-                                "📜 `/lyrics [نام آهنگ]` - دریافت متن آهنگ\n"
-                                "📁 `/list` - دریافت فایل دیتابیس\n"
-                                "🔹 مثال: `/lyrics Lose Yourself - Eminem`"
-                            )
-                            await send_message(chat_id, help_text)
+                            await send_message(chat_id, "📌 **دستورات ربات:**\n"
+                                                        "🎵 `/random` - دریافت ۳ آهنگ تصادفی\n"
+                                                        "🔍 `/search` - جستجو در آرشیو آهنگ‌ها\n"
+                                                        "📜 `/lyrics` - دریافت متن آهنگ\n"
+                                                        "📁 `/list` - دریافت لیست آهنگ‌ها\n"
+                                                        "🔄 `/start` - راه‌اندازی مجدد ربات")
 
                         # 📌 **بررسی ارسال آهنگ جدید و فوروارد آن در گروه**
                         elif "audio" in message and str(chat_id) == GROUP_ID:
