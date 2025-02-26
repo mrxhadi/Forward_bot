@@ -109,8 +109,6 @@ async def send_message(chat_id, text, reply_markup=None):
         await client.get(f"{BASE_URL}/sendMessage", params=params)
 
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
-import difflib
-
 async def search_song(chat_id, query):
     query = query.lower()
     
@@ -136,15 +134,13 @@ async def search_song(chat_id, query):
         return
 
     # ارسال هر نتیجه در یک پیام جداگانه
-    for similarity, song in top_results:
-        title = song["title"]
-        performer = song["performer"]
+    for _, song in top_results:
+        await send_message(chat_id, f"{song['title']} - {song['performer']}")
+        await asyncio.sleep(0.5)  # جلوگیری از محدودیت API
 
-        await send_message(chat_id, f"{title} - {performer}")
-        await asyncio.sleep(1)  # جلوگیری از محدودیت API
-        
-        await send_message(chat_id, "اسمو کپی کن و بهم بده تا آهنگو برات بفرستم.")
-        
+    # ارسال پیام نهایی بعد از همه نتایج
+    await send_message(chat_id, "اسمو کپی کن و بهم بده تا آهنگو برات بفرستم.")      
+    
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
