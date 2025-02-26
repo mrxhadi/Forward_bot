@@ -49,15 +49,6 @@ async def send_message(chat_id, text):
         except Exception as e:
             print(f"⚠️ خطا در `send_message`: {e}")
 
-# 📌 **ارسال آهنگ انتخاب‌شده توسط کاربر**
-async def send_selected_song(chat_id, song):
-    async with httpx.AsyncClient() as client:
-        await client.get(f"{BASE_URL}/copyMessage", params={
-            "chat_id": chat_id,
-            "from_chat_id": GROUP_ID,
-            "message_id": song["message_id"]
-        })
-
 # 📌 **ارسال ۳ آهنگ تصادفی در پیوی**
 async def send_random_song(chat_id):
     if not song_database:
@@ -136,11 +127,26 @@ async def search_song(chat_id, query):
     for song in results_sorted:
         title = song.get("title", "نامشخص")
         performer = song.get("performer", "نامشخص")
-        await send_message(chat_id, f"🎵 {title} - {performer}")
+        await send_message(chat_id, f"{title} - {performer}")
         await asyncio.sleep(1)  # جلوگیری از ارسال سریع و محدودیت‌های API
 
     # بعد از ارسال همه نتایج
-    await send_message(chat_id, "✏️ اسمو کپی کن و بفرست تا اهنگو برات بفرستم.")
+    await send_message(chat_id, "اسمو کپی کن و بفرست تا اهنگو برات بفرستم.")
+
+# 📌 **ارسال آهنگ انتخابی توسط کاربر**
+async def send_selected_song(chat_id, selected_song):
+    try:
+        # ارسال پیام به صورت فوروارد از گروه
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{BASE_URL}/copyMessage", params={
+                "chat_id": chat_id,
+                "from_chat_id": GROUP_ID,
+                "message_id": selected_song["message_id"]
+            })
+            if not response.json().get("ok"):
+                await send_message(chat_id, "⚠️ خطا در ارسال آهنگ!")
+    except Exception as e:
+        await send_message(chat_id, f"⚠️ خطا در ارسال آهنگ: {e}")
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
