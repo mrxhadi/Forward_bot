@@ -95,7 +95,7 @@ async def send_random_song(chat_id):
                 song_database.remove(song)
                 save_database(song_database)
 
-# 📌 **ارسال پیام با دکمه‌های شیشه‌ای**
+# 📌 **ارسال پیام**
 async def send_message(chat_id, text, reply_markup=None):
     params = {
         "chat_id": chat_id,
@@ -109,6 +109,8 @@ async def send_message(chat_id, text, reply_markup=None):
         await client.get(f"{BASE_URL}/sendMessage", params=params)
 
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
+import difflib
+
 async def search_song(chat_id, query):
     query = query.lower()
     
@@ -125,13 +127,16 @@ async def search_song(chat_id, query):
     # مرتب‌سازی آهنگ‌ها بر اساس شباهت (بیشترین شباهت اول)
     song_matches.sort(reverse=True, key=lambda x: x[0])
 
+    # محدود کردن به ۵ نتیجه برتر
+    top_results = song_matches[:5]
+
     # اگر هیچ آهنگی پیدا نشد
-    if not song_matches:
+    if not top_results:
         await send_message(chat_id, "نتیجه‌ای یافت نشد.")
         return
 
     # ارسال هر نتیجه در یک پیام جداگانه
-    for similarity, song in song_matches:
+    for similarity, song in top_results:
         title = song["title"]
         performer = song["performer"]
 
