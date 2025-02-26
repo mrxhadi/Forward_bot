@@ -111,20 +111,34 @@ async def send_message(chat_id, text, reply_markup=None):
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
     query = query.lower()
-    results = [song for song in song_database if query in song.get("title", "").lower()]
 
+    # فیلتر کردن نتایج دقیق
+    exact_results = [song for song in song_database if query in song.get("title", "").lower()]
+
+    # پیدا کردن نزدیک‌ترین نتایج مشابه
+    all_titles = [song.get("title", "").lower() for song in song_database]
+    similar_titles = difflib.get_close_matches(query, all_titles, n=5, cutoff=0.4)
+
+    # ترکیب نتایج دقیق و مشابه
+    results = []
+    for song in song_database:
+        title = song.get("title", "").lower()
+        if title in similar_titles or song in exact_results:
+            results.append(song)
+
+    # اگر هیچ نتیجه‌ای پیدا نشد
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ارسال هر نتیجه به‌صورت پیام جداگانه (حداکثر ۵ نتیجه)
-    for song in results[:5]:  
-        song_text = f"{song['title']} - {song['performer']}"
-        await send_message(chat_id, song_text)
-        await asyncio.sleep(0.5)  # جلوگیری از محدودیت API تلگرام
+    # نمایش حداکثر ۵ نتیجه
+    results = results[:5]
+    for song in results:
+        title = song.get("title", "بدون عنوان")
+        performer = song.get("performer", "نامشخص")
+        await send_message(chat_id, f"🎵 {title} - {performer}")
 
-    # 📌 افزودن پیام راهنما در انتهای نتایج
-    await send_message(chat_id, "اسم آهنگ رو از بین انتخابا کپی و ارسال کن تا آهنگو بفرستم !")
+    await send_message(chat_id, "اسم آهنگ رو کپی کن و ارسال کن تا بفرستم!")
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
