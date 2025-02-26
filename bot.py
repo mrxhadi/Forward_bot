@@ -219,48 +219,41 @@ async def check_new_messages():
                         chat_id = message.get("chat", {}).get("id")
                         text = message.get("text", "").strip()
 
-                        # 📌 **دستور `/start` و خوشامدگویی**
+                        # ✅ بررسی دستور `/start`
                         if text == "/start":
-                            await send_message(chat_id, "👋 از منوی دستورات استفاده کن!\n📢 @HTG_music")
+                            await send_message(chat_id, " /help از منوی دستورات استفاده کن")
 
-                        # 📌 **دریافت فایل `songs.json` برای بروزرسانی دیتابیس**
+                        # ✅ دریافت فایل دیتابیس
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
 
-                        # 📌 **جستجو در دیتابیس آهنگ‌ها**
+                        # ✅ جستجو در دیتابیس
                         elif text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
 
-                        #ارسال اهنگ سرچ شده
-                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
-                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
-                            await send_selected_song(chat_id, selected_song)
-                            
-                        # 📌 **دریافت متن آهنگ از Genius API**
-                        elif text.startswith("/lyrics "):
-                            song_query = text.replace("/lyrics ", "").strip()
-                            lyrics_result = await search_song_lyrics(song_query)
-                            await send_message(chat_id, lyrics_result)
+                        # ✅ ارسال آهنگ موردنظر در صورت موجود بودن در دیتابیس
+                        elif any(text.lower() == f"{song['title']} - {song['performer']}".lower() for song in song_database):
+                            print(f"🔍 تشخیص داده شد که کاربر درخواست ارسال آهنگ دارد: {text}")
+                            await send_selected_song(chat_id, text)
 
-                        # 📌 **ارسال ۳ آهنگ تصادفی در پیوی**
+                        # ✅ ارسال آهنگ رندوم
                         elif text == "/random":
                             await send_random_song(chat_id)
 
-                        # 📌 **ارسال فایل `songs.json`**
+                        # ✅ ارسال فایل دیتابیس
                         elif text == "/list":
                             await send_file_to_user(chat_id)
 
-                        # 📌 **راهنما (`/help`)**
+                        # ✅ نمایش راهنما
                         elif text == "/help":
-                            await send_message(chat_id, "📌 **دستورات ربات:**\n"
-                                                        "🎵 `/random` - دریافت ۳ آهنگ تصادفی\n"
-                                                        "🔍 `/search` - جستجو در آرشیو آهنگ‌ها\n"
-                                                        "📜 `/lyrics` - دریافت متن آهنگ\n"
-                                                        "📁 `/list` - دریافت لیست آهنگ‌ها\n"
-                                                        "🔄 `/start` - راه‌اندازی مجدد ربات")
+                            await send_message(chat_id, " **دستورات ربات:**\n"
+                                " `/random` - سه تا آهنگ رندوم بگیر\n"
+                                " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
+                                " **مثال:**\n"
+                                "`/search wanted`")
 
-                        # 📌 **بررسی ارسال آهنگ جدید و فوروارد آن در گروه**
+                        # ✅ بررسی ارسال آهنگ جدید و فوروارد آن در گروه
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
@@ -272,9 +265,11 @@ async def check_new_messages():
 
 # 📌 ارسال آهنگ انتخاب‌شده توسط کاربر
 async def send_selected_song(chat_id, song_name):
-    # 🔍 جستجو در دیتابیس برای پیدا کردن آهنگی که دقیقاً نامش مطابق `song_name` باشد
+    print(f"🎵 دریافت درخواست ارسال آهنگ: {song_name}")
+
+    # **بررسی آهنگ موردنظر در دیتابیس**
     selected_song = next(
-        (song for song in song_database if "title" in song and "performer" in song and f"{song['title']} - {song['performer']}" == song_name),
+        (song for song in song_database if "title" in song and "performer" in song and f"{song['title']} - {song['performer']}".strip().lower() == song_name.strip().lower()),
         None
     )
 
@@ -287,6 +282,8 @@ async def send_selected_song(chat_id, song_name):
         await send_message(chat_id, "⚠️ خطا در یافتن آهنگ!")
         print(f"⚠️ خطا: message_id در آهنگ موجود نیست! داده‌های آهنگ: {selected_song}")
         return
+
+    print(f"✅ آهنگ پیدا شد: {selected_song['title']} - {selected_song['performer']}")
 
     async with httpx.AsyncClient() as client:
         await client.get(f"{BASE_URL}/copyMessage", params={
