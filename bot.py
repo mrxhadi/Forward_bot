@@ -34,18 +34,21 @@ def save_database(data):
 song_database = load_database()
 
 # 📌 **ارسال پیام به تلگرام**
-async def send_message(chat_id, text, reply_markup=None):
-    params = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML"
-    }
-    if reply_markup:
-        params["reply_markup"] = json.dumps(reply_markup)
-
+async def send_message(chat_id, text):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        await client.get(f"{BASE_URL}/sendMessage", params=params)
+        try:
+            response = await client.get(f"{BASE_URL}/sendMessage", params={
+                "chat_id": chat_id,
+                "text": text
+            })
+            response_data = response.json()
 
+            if not response_data.get("ok"):
+                print(f"⚠️ خطا در ارسال پیام: {response_data}")
+        
+        except Exception as e:
+            print(f"⚠️ خطا در `send_message`: {e}")
+            
 # 📌 **دریافت و پردازش فایل `songs.json`**
 async def handle_document(document, chat_id):
     file_name = document["file_name"]
