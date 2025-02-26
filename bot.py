@@ -109,59 +109,18 @@ async def send_message(chat_id, text, reply_markup=None):
 
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
-    query = query.lower().strip()
+    query = query.lower()
+    results = [song for song in song_database if query in song.get("title", "").lower()]
 
-    # دریافت بهترین نتایج مشابه
-    results = []
-    for song in song_database:
-        title = f"{song.get('title', '')} - {song.get('performer', '')}".lower()
-        if query in title:
-            results.append(song)
-
-    # اگر نتیجه‌ای پیدا نشد
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # انتخاب ۵ نتیجه با بیشترین شباهت
-    closest_matches = difflib.get_close_matches(query, [f"{s['title']} - {s['performer']}" for s in results], n=5, cutoff=0.3)
-    
-    # اگر هنوز نتیجه‌ای پیدا نشد
-    if not closest_matches:
-        await send_message(chat_id, "❌ نتیجه مشابهی یافت نشد!")
-        return
-
-    # ساخت دکمه‌های شیشه‌ای برای ۵ نتیجه برتر
-    keyboard = {
-        "inline_keyboard": [
-            [{"text": title, "callback_data": f"select_{song['message_id']}"}]
-            for song in results if f"{song['title']} - {song['performer']}" in closest_matches
-        ]
-    }
-
-    response_text = "🎵 <b>نتایج جستجو:</b>\n\n🔹 روی یکی از دکمه‌های زیر کلیک کنید تا آهنگ فوروارد شود."
-
-    await send_message(chat_id, response_text, reply_markup=keyboard)
-
-#پردازش دکمه ها
-async def handle_callback(callback_query):
-    data = callback_query["data"]
-    chat_id = callback_query["message"]["chat"]["id"]
-
-    if data.startswith("select_"):
-        message_id = data.split("_")[1]
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": chat_id,
-                "from_chat_id": GROUP_ID,
-                "message_id": message_id
-            })
-
-        if response.json().get("ok"):
-            await send_message(chat_id, "✅ آهنگ موردنظر ارسال شد!")
-        else:
-            await send_message(chat_id, "⚠️ خطایی در ارسال آهنگ رخ داد!")
+    # 📌 ارسال هر نتیجه به‌صورت پیام جداگانه (حداکثر ۵ نتیجه)
+    for song in results[:5]:  
+        song_text = f"{song['title']} - {song['performer']}"
+        await send_message(chat_id, song_text)
+        await asyncio.sleep(0.5)  # جلوگیری از محدودیت API تلگرام
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
