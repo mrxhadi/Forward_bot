@@ -112,33 +112,33 @@ async def send_message(chat_id, text, reply_markup=None):
 async def search_song(chat_id, query):
     query = query.lower()
 
-    # فیلتر کردن نتایج دقیق
-    exact_results = [song for song in song_database if query in song.get("title", "").lower()]
+    # استخراج عناوین آهنگ‌ها
+    song_titles = list(set(song.get("title", "").lower() for song in song_database if "title" in song))
 
-    # پیدا کردن نزدیک‌ترین نتایج مشابه
-    all_titles = [song.get("title", "").lower() for song in song_database]
-    similar_titles = difflib.get_close_matches(query, all_titles, n=5, cutoff=0.4)
+    # پیدا کردن نتایج مشابه
+    close_matches = difflib.get_close_matches(query, song_titles, n=5, cutoff=0.4)
 
-    # ترکیب نتایج دقیق و مشابه
+    # فیلتر کردن آهنگ‌های مرتبط
     results = []
+    seen_titles = set()
     for song in song_database:
         title = song.get("title", "").lower()
-        if title in similar_titles or song in exact_results:
+        if title in close_matches and title not in seen_titles:
             results.append(song)
+            seen_titles.add(title)  # جلوگیری از تکرار عنوان‌ها
 
-    # اگر هیچ نتیجه‌ای پیدا نشد
     if not results:
-        await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
+        await send_message(chat_id, "هیچ آهنگی در دیتابیس پیدا نشد")
         return
 
-    # نمایش حداکثر ۵ نتیجه
-    results = results[:5]
-    for song in results:
-        title = song.get("title", "بدون عنوان")
-        performer = song.get("performer", "نامشخص")
-        await send_message(chat_id, f"🎵 {title} - {performer}")
+    # ایجاد لیست نتایج بدون message_id
+    song_list = "\n".join([f"{song['title']} - {song.get('performer', 'Unknown')}" for song in results])
 
-    await send_message(chat_id, "اسم آهنگ رو کپی کن و ارسال کن تا بفرستم!")
+    response_text = "نتایج جستجو:\n"
+    response_text += song_list
+    response_text += "\n\nاسم آهنگ رو کپی و ارسال کن تا برات بفرستم"
+
+    await send_message(chat_id, response_text)
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
