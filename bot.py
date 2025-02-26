@@ -259,11 +259,11 @@ async def check_new_messages():
                         elif text.startswith("/lyrics "):
                              query = text.replace("/lyrics ", "").strip()
                              lyrics = await search_song_lyrics(query)
-                        await send_message(chat_id, lyrics)
+                             await send_message(chat_id, lyrics)
 
                         # 📌 بررسی ارسال آهنگ جدید و فوروارد آن در گروه
                         elif "audio" in message and str(chat_id) == GROUP_ID:
-                            await forward_music_without_caption(message, message.get("message_thread_id"))
+                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
         except Exception as e:
             print(f"⚠️ خطا: {e}")
