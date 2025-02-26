@@ -270,7 +270,7 @@ async def check_new_messages():
                                  "مثال:\n"
                                  "/search wanted"
                )
-                            await send_message(chat_id, help_text)
+                        await send_message(chat_id, help_text)
 
                         # ✅ بررسی ارسال آهنگ جدید و فوروارد آن در گروه
                         elif "audio" in message and str(chat_id) == GROUP_ID:
