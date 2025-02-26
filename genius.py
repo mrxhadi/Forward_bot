@@ -7,32 +7,23 @@ GENIUS_ACCESS_TOKEN = os.getenv("GENIUS_ACCESS_TOKEN")
 BASE_URL = "https://api.genius.com"
 
 # 📌 جستجوی آهنگ در Genius
-async def search_song_lyrics(song_name):
-    if not GENIUS_ACCESS_TOKEN:
-        return "⚠️ خطا: توکن Genius تنظیم نشده!"
+async def search_song_lyrics(query):
+    headers = {"Authorization": f"Bearer {GENIUS_ACCESS_TOKEN}"}
+    search_url = f"https://api.genius.com/search?q={query}"
 
     async with httpx.AsyncClient() as client:
-        # جستجو در API
-        headers = {"Authorization": f"Bearer {GENIUS_ACCESS_TOKEN}"}
-        search_url = f"{BASE_URL}/search"
-        response = await client.get(search_url, headers=headers, params={"q": song_name})
-
-        if response.status_code != 200:
-            return f"⚠️ خطا در درخواست: {response.status_code}"
-
+        response = await client.get(search_url, headers=headers)
         data = response.json()
-        if not data["response"]["hits"]:
-            return "❌ متن این آهنگ در دیتابیس Genius پیدا نشد."
 
-        # دریافت اولین نتیجه مرتبط
-        song_info = data["response"]["hits"][0]["result"]
-        song_title = song_info["title"]
-        song_artist = song_info["primary_artist"]["name"]
-        lyrics_url = song_info["url"]
+        if "response" in data and "hits" in data["response"] and len(data["response"]["hits"]) > 0:
+            song_info = data["response"]["hits"][0]["result"]
+            song_title = song_info.get("title", "نامشخص")
+            song_artist = song_info.get("primary_artist", {}).get("name", "نامشخص")
+            song_url = song_info.get("url", "")
 
-        # دریافت متن آهنگ از صفحه وب
-        lyrics = await fetch_lyrics_from_url(lyrics_url)
-        return f"🎵 **{song_title} - {song_artist}**\n\n{lyrics}"
+            return f"🎵 **{song_title}** - {song_artist}\n🔗 [متن آهنگ در جینیس]({song_url})"
+        else:
+            return "❌ متن آهنگ پیدا نشد!"
 
 # 📌 دریافت متن آهنگ از URL صفحه
 async def fetch_lyrics_from_url(url):
