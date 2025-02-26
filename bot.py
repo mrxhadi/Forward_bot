@@ -271,7 +271,7 @@ async def check_new_messages():
                                  "/search wanted"
                )
                         await send_message(chat_id, help_text)
-
+                        
                         # ✅ بررسی ارسال آهنگ جدید و فوروارد آن در گروه
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
