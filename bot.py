@@ -83,12 +83,11 @@ async def send_random_song(chat_id):
         return
 
     songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
-    
+
     async with httpx.AsyncClient() as client:
         for song in songs:
-            if "message_id" not in song:
-                print(f"⚠️ خطا: آهنگ بدون `message_id` در دیتابیس! {song}")
-                continue
+            title = song["title"] if "title" in song else "نامشخص"
+            performer = song["performer"] if "performer" in song else "نامشخص"
 
             response = await client.get(f"{BASE_URL}/copyMessage", params={
                 "chat_id": chat_id,
@@ -96,9 +95,9 @@ async def send_random_song(chat_id):
                 "message_id": song["message_id"]
             })
 
-            response_data = response.json()
-            if not response_data.get("ok"):
-                print(f"⚠️ خطا در ارسال آهنگ {song['title']}: {response_data}")
+            if not response.json().get("ok"):
+                song_database.remove(song)
+                save_database(song_database)
 
     # انتخاب تصادفی ۳ آهنگ از دیتابیس
     songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
@@ -182,18 +181,18 @@ async def search_song(chat_id, query):
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
-    message_id = message["message_id"]
-    audio = message.get("audio", {})
+    message_id = message.get("message_id")
+    audio = message.get("audio")
 
     if not audio:
         print(f"⚠️ پیام {message_id} شامل آهنگ نیست!")
         return
 
-    # دریافت مقادیر `title` و `performer` (اگر مقدار نداشتند، مقدار پیش‌فرض بده)
-    title = audio.get("title", "نامشخص")
-    performer = audio.get("performer", "نامشخص")
-
-    audio_file_id = audio["file_id"]
+    # دریافت `title` و `performer` با مقدار پیش‌فرض
+    title = audio.get("title") if "title" in audio else "نامشخص"
+    performer = audio.get("performer") if "performer" in audio else "نامشخص"
+    
+    audio_file_id = audio.get("file_id")
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
