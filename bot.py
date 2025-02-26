@@ -83,30 +83,27 @@ async def send_random_song(chat_id):
         return
 
     songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
-
     async with httpx.AsyncClient() as client:
         for song in songs:
             try:
-                # استفاده از روش جستجو برای دریافت `title` و `performer`
-                title = song.get("title", "").strip() if "title" in song else "نامشخص"
-                performer = song.get("performer", "").strip() if "performer" in song else "نامشخص"
+                # استفاده از `.get()` برای جلوگیری از خطای `title`
+                title = song.get("title", "نامشخص")
+                performer = song.get("performer", "نامشخص")
 
-                # بررسی `message_id`
-                message_id = song.get("message_id", None)
-                if not message_id:
-                    print(f"⚠️ خطا: `message_id` در آهنگ '{title}' موجود نیست.")
+                if "message_id" not in song:
+                    print(f"⚠️ خطا: پیام ایدی در آهنگ '{title}' موجود نیست.")
                     continue  # این آهنگ را رد کن
 
                 response = await client.get(f"{BASE_URL}/copyMessage", params={
                     "chat_id": chat_id,
                     "from_chat_id": GROUP_ID,
-                    "message_id": message_id
+                    "message_id": song["message_id"]
                 })
                 
                 response_data = response.json()
                 if not response_data.get("ok"):
-                    print(f"⚠️ خطا در ارسال آهنگ {message_id}: {response_data}")
-
+                    print(f"⚠️ خطا در ارسال آهنگ {title}: {response_data}")
+                    
                     # اگر پیام پیدا نشد، از دیتابیس حذف شود
                     if response_data.get("error_code") == 400 and "message to copy not found" in response_data.get("description", ""):
                         song_database.remove(song)
@@ -116,12 +113,12 @@ async def send_random_song(chat_id):
                 print(f"⚠️ خطا در ارسال آهنگ تصادفی: {e}")
 
             await asyncio.sleep(1)  # جلوگیری از محدودیت API
+            
 # 📌 **ارسال پیام**
 async def send_message(chat_id, text, reply_markup=None):
     params = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": "HTML"
     }
     if reply_markup:
         params["reply_markup"] = json.dumps(reply_markup)
@@ -167,39 +164,37 @@ async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
     audio = message["audio"]
 
-    title = audio.get("title", "نامشخص")
-    performer = audio.get("performer", "نامشخص")
-    file_id = audio.get("file_id")
-
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
-            "chat_id": GROUP_ID,
-            "audio": file_id,
-            "message_thread_id": thread_id,
-            "caption": ""  # حذف کپشن
-        })
-
-        forward_data = forward_response.json()
-        if forward_data.get("ok"):
-            new_message_id = forward_data["result"]["message_id"]
-            
-            # ذخیره آهنگ در دیتابیس
-            song_database.append({
-                "message_id": new_message_id,
-                "thread_id": thread_id,
-                "title": title,
-                "performer": performer
-            })
-            save_database(song_database)
-
-            await asyncio.sleep(1)
-
-            # حذف پیام اصلی
-            await client.get(f"{BASE_URL}/deleteMessage", params={
+        try:
+            forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
                 "chat_id": GROUP_ID,
-                "message_id": message_id
+                "audio": audio["file_id"],
+                "message_thread_id": thread_id,
+                "caption": ""  
             })
 
+            forward_data = forward_response.json()
+            if forward_data.get("ok"):
+                new_message_id = forward_data["result"]["message_id"]
+
+                # ذخیره در دیتابیس با استفاده از `.get()` برای جلوگیری از خطای `title`
+                song_database.append({
+                    "title": audio.get("title", "نامشخص"),
+                    "performer": audio.get("performer", "نامشخص"),
+                    "message_id": new_message_id,
+                    "thread_id": thread_id
+                })
+                save_database(song_database)
+
+                # حذف پیام اصلی
+                await asyncio.sleep(1)
+                await client.get(f"{BASE_URL}/deleteMessage", params={
+                    "chat_id": GROUP_ID,
+                    "message_id": message_id
+                })
+
+        except Exception as e:
+            print(f"⚠️ خطا در فوروارد آهنگ: {e}")
 # 📌 **ارسال ۳ آهنگ تصادفی به `11:11` هر شب**
 async def send_random_songs_to_11_11():
     if not song_database:
