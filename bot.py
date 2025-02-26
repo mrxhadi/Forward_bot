@@ -184,39 +184,60 @@ async def check_new_messages():
     last_update_id = None
     while True:
         try:
+            # ارسال درخواست GET برای دریافت پیام‌های جدید
+            print("در حال ارسال درخواست برای دریافت پیام‌های جدید...")
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
                 response = await client.get(f"{BASE_URL}/getUpdates", params={"offset": last_update_id})
+                print(f"پاسخ دریافتی: {response.text}")
                 data = response.json()
 
-                if data.get("ok"):
-                    for update in data["result"]:
-                        last_update_id = update["update_id"] + 1
-                        message = update.get("message", {})
-                        chat_id = message.get("chat", {}).get("id")
-                        text = message.get("text", "").strip()
+                # بررسی پاسخ
+                if not data.get("ok"):
+                    print("خطا در دریافت داده‌ها: ", data)
+                    continue  # ادامه حلقه در صورت دریافت خطا
 
-                        if text == "/start":
-                            await send_message(chat_id, "/help از منوی دستورات استفاده کن")
-                        elif "document" in message:
-                            await handle_document(message["document"], chat_id)
-                        elif text.startswith("/search "):
-                            query = text.replace("/search ", "").strip()
-                            await search_song(chat_id, query)
-                        elif text == "/random":
-                            await send_random_song(chat_id)
-                        elif text == "/list":
-                            await send_file_to_user(chat_id)
-                        elif text == "/help":
-                            await send_message(chat_id, " **دستورات ربات:**\n"
-                                " `/random` - سه تا آهنگ رندوم بگیر\n"
-                                " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
-                                " **مثال:**\n"
-                                "`/search wanted`")
-                        elif "audio" in message and str(chat_id) == GROUP_ID:
-                            await forward_music_without_caption(message, message.get("message_thread_id"))
+                # پردازش نتایج
+                print("در حال پردازش نتایج...")
+                for update in data["result"]:
+                    print(f"پردازش آپدیت جدید: {update}")
+
+                    last_update_id = update["update_id"] + 1
+                    message = update.get("message", {})
+                    chat_id = message.get("chat", {}).get("id")
+                    text = message.get("text", "").strip()
+
+                    # نمایش لاگ برای هر دستور
+                    print(f"پیام دریافت شده: {text}")
+
+                    if text == "/start":
+                        print("دستور /start دریافت شد.")
+                        await send_message(chat_id, "/help از منوی دستورات استفاده کن")
+                    elif "document" in message:
+                        print("دستور ارسال فایل دریافت شد.")
+                        await handle_document(message["document"], chat_id)
+                    elif text.startswith("/search "):
+                        print(f"دستور جستجو با عبارت: {text} دریافت شد.")
+                        query = text.replace("/search ", "").strip()
+                        await search_song(chat_id, query)
+                    elif text == "/random":
+                        print("دستور /random دریافت شد.")
+                        await send_random_song(chat_id)
+                    elif text == "/list":
+                        print("دستور /list دریافت شد.")
+                        await send_file_to_user(chat_id)
+                    elif text == "/help":
+                        print("دستور /help دریافت شد.")
+                        await send_message(chat_id, " **دستورات ربات:**\n"
+                            " `/random` - سه تا آهنگ رندوم بگیر\n"
+                            " `/search` - جلوی این دستور اسم آهنگو بنویس تا دنبالش بگردم\n"
+                            " **مثال:**\n"
+                            "`/search wanted`")
+                    elif "audio" in message and str(chat_id) == GROUP_ID:
+                        print(f"ارسال آهنگ به تاپیک گروه: {chat_id}")
+                        await forward_music_without_caption(message, message.get("message_thread_id"))
 
         except Exception as e:
-            print(f"⚠️ خطا: {e}")
+            print(f"⚠️ خطا در پردازش پیام‌ها: {e}")
             await asyncio.sleep(5)
 
         await asyncio.sleep(3)
