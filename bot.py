@@ -111,34 +111,32 @@ async def send_message(chat_id, text, reply_markup=None):
 # 📌 **جستجو در دیتابیس و ارسال نتایج به کاربر**
 async def search_song(chat_id, query):
     query = query.lower()
-
-    # استخراج عناوین آهنگ‌ها
-    song_titles = list(set(song.get("title", "").lower() for song in song_database if "title" in song))
-
-    # پیدا کردن نتایج مشابه
-    close_matches = difflib.get_close_matches(query, song_titles, n=5, cutoff=0.4)
-
-    # فیلتر کردن آهنگ‌های مرتبط
-    results = []
-    seen_titles = set()
+    
+    # دریافت لیست عنوان‌های آهنگ‌ها از دیتابیس
+    song_matches = []
     for song in song_database:
         title = song.get("title", "").lower()
-        if title in close_matches and title not in seen_titles:
-            results.append(song)
-            seen_titles.add(title)  # جلوگیری از تکرار عنوان‌ها
+        performer = song.get("performer", "").lower()
+        similarity = difflib.SequenceMatcher(None, query, title).ratio()  # محاسبه میزان شباهت
+        
+        if similarity > 0.4:  # فقط آهنگ‌های با ۴۰٪ شباهت یا بیشتر نمایش داده شوند
+            song_matches.append((similarity, song))
 
-    if not results:
-        await send_message(chat_id, "هیچ آهنگی در دیتابیس پیدا نشد")
+    # مرتب‌سازی آهنگ‌ها بر اساس شباهت (بیشترین شباهت اول)
+    song_matches.sort(reverse=True, key=lambda x: x[0])
+
+    # اگر هیچ آهنگی پیدا نشد
+    if not song_matches:
+        await send_message(chat_id, "نتیجه‌ای یافت نشد.")
         return
 
-    # ایجاد لیست نتایج بدون message_id
-    song_list = "\n".join([f"{song['title']} - {song.get('performer', 'Unknown')}" for song in results])
+    # ارسال هر نتیجه در یک پیام جداگانه
+    for similarity, song in song_matches:
+        title = song["title"]
+        performer = song["performer"]
 
-    response_text = "نتایج جستجو:\n"
-    response_text += song_list
-    response_text += "\n\nاسم آهنگ رو کپی و ارسال کن تا برات بفرستم"
-
-    await send_message(chat_id, response_text)
+        await send_message(chat_id, f"{title} - {performer}")
+        await asyncio.sleep(1)  # جلوگیری از محدودیت API
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
