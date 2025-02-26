@@ -107,28 +107,25 @@ async def send_random_song(chat_id):
 
 # 📌 **جستجو در دیتابیس**
 async def search_song(chat_id, query):
-    query = query.lower().strip()
-    results = sorted(
-        [song for song in song_database if song.get("title") and query in song["title"].lower()],
-        key=lambda x: difflib.SequenceMatcher(None, query, x.get("title", "").lower()).ratio(),
-        reverse=True
-    )
+    query = query.lower()
+    
+    # 📌 مقایسه شباهت عناوین آهنگ‌ها با ورودی کاربر
+    song_titles = [song["title"].lower() for song in song_database]
+    matches = difflib.get_close_matches(query, song_titles, n=5, cutoff=0.4)
+
+    results = [song for song in song_database if song["title"].lower() in matches]
 
     if not results:
         await send_message(chat_id, "❌ هیچ آهنگی در دیتابیس پیدا نشد!")
         return
 
-    # 📌 ارسال حداکثر ۵ نتیجه برتر
-    results = results[:5]
-
-    response_text = "نتایج جستجو:\n"
+    # 📌 ایجاد لیست مرتب‌شده از نزدیک‌ترین تطابق‌ها
+    response_text = "نتایج جستجو:\n\n"
     for song in results:
-        title = song.get("title", "نامشخص")
-        performer = song.get("performer", "نامشخص")
-        response_text += f"{title} - {performer}\n"
+        response_text += f"{song['title']} - {song['performer']}\n"
 
-    await send_message(chat_id, response_text + "\nاسمو کپی کن و بهم بده تا آهنگو بفرستم.")
-
+    await send_message(chat_id, response_text.strip())
+    
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
