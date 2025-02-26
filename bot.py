@@ -142,7 +142,9 @@ async def search_song(chat_id, query):
 
         await send_message(chat_id, f"{title} - {performer}")
         await asyncio.sleep(1)  # جلوگیری از محدودیت API
-    
+        
+        await send_message(chat_id, "اسمو کپی کن و بهم بده تا آهنگو برات بفرستم.")
+        
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
