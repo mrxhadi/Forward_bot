@@ -2,3 +2,4 @@ httpx
 asyncio
 requests
 pytz
+beautifulsoup4
