@@ -186,6 +186,28 @@ async def send_random_songs_to_11_11():
             })
             await asyncio.sleep(1)
 
+async def handle_document(document, chat_id):
+    file_name = document["file_name"]
+    
+    if file_name != "songs.json":
+        await send_message(chat_id, "⚠️ لطفاً `songs.json` ارسال کنید.")
+        return
+
+    file_id = document["file_id"]
+    async with httpx.AsyncClient() as client:
+        file_info = await client.get(f"{BASE_URL}/getFile", params={"file_id": file_id})
+        file_path = file_info.json()["result"]["file_path"]
+        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+        response = await client.get(file_url)
+
+        with open(DATABASE_FILE, "wb") as file:
+            file.write(response.content)
+
+    # 🚀 دیتابیس را مجدد بارگذاری کن
+    global song_database
+    song_database = load_database()
+    
+    await send_message(chat_id, f"✅ دیتابیس آپدیت شد! تعداد آهنگ‌ها: {len(song_database)}")
 # 📌 **اجرای اصلی**
 async def main():
     await send_message(GROUP_ID, "🔥 I'm Ready, brothers!")
