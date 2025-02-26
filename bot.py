@@ -232,6 +232,11 @@ async def check_new_messages():
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
 
+                        #ارسال اهنگ سرچ شده
+                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
+                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
+                            await send_selected_song(chat_id, selected_song)
+                            
                         # 📌 **دریافت متن آهنگ از Genius API**
                         elif text.startswith("/lyrics "):
                             song_query = text.replace("/lyrics ", "").strip()
