@@ -271,23 +271,30 @@ async def check_new_messages():
         await asyncio.sleep(3)
 
 # 📌 ارسال آهنگ انتخاب‌شده توسط کاربر
-async def send_selected_song(chat_id, song):
-    message_id = song.get("message_id")  # دریافت آی‌دی پیام آهنگ
+async def send_selected_song(chat_id, song_name):
+    # 🔍 جستجو در دیتابیس برای پیدا کردن آهنگی که دقیقاً نامش مطابق `song_name` باشد
+    selected_song = next(
+        (song for song in song_database if "title" in song and "performer" in song and f"{song['title']} - {song['performer']}" == song_name),
+        None
+    )
 
-    if not message_id:
-        await send_message(chat_id, "⚠️ خطا: اطلاعات آهنگ ناقص است. ارسال ممکن نیست.")
+    if not selected_song:
+        await send_message(chat_id, "⚠️ آهنگ موردنظر یافت نشد!")
+        print(f"⚠️ خطا: آهنگ پیدا نشد! مقدار دریافت‌شده: {song_name}")
+        return
+
+    if "message_id" not in selected_song:
+        await send_message(chat_id, "⚠️ خطا در یافتن آهنگ!")
+        print(f"⚠️ خطا: message_id در آهنگ موجود نیست! داده‌های آهنگ: {selected_song}")
         return
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BASE_URL}/copyMessage", params={
+        await client.get(f"{BASE_URL}/copyMessage", params={
             "chat_id": chat_id,
             "from_chat_id": GROUP_ID,
-            "message_id": message_id
+            "message_id": selected_song["message_id"]
         })
-
-        if not response.json().get("ok"):
-            await send_message(chat_id, "⚠️ مشکلی در ارسال آهنگ پیش آمد. لطفاً دوباره تلاش کنید.")
-
+        
 # 📌 **اجرای اصلی**
 async def main():
     await send_message(GROUP_ID, "🔥 I'm Ready, brothers!")
