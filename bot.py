@@ -83,18 +83,19 @@ async def send_random_song(chat_id):
         return
 
     songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
-
     async with httpx.AsyncClient() as client:
         for song in songs:
-            title = song["title"] if "title" in song else "نامشخص"
-            performer = song["performer"] if "performer" in song else "نامشخص"
+            message_id = song.get("message_id")
+            title = song.get("title", "نامشخص")
+            performer = song.get("performer", "نامشخص")
 
             response = await client.get(f"{BASE_URL}/copyMessage", params={
                 "chat_id": chat_id,
                 "from_chat_id": GROUP_ID,
-                "message_id": song["message_id"]
+                "message_id": message_id
             })
 
+            # بررسی موفقیت ارسال، در صورت ناموفق بودن حذف آهنگ خراب از دیتابیس
             if not response.json().get("ok"):
                 song_database.remove(song)
                 save_database(song_database)
@@ -181,49 +182,41 @@ async def search_song(chat_id, query):
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
-    message_id = message.get("message_id")
-    audio = message.get("audio")
+    message_id = message["message_id"]
+    audio = message["audio"]
 
-    if not audio:
-        print(f"⚠️ پیام {message_id} شامل آهنگ نیست!")
-        return
-
-    # دریافت `title` و `performer` با مقدار پیش‌فرض
-    title = audio.get("title") if "title" in audio else "نامشخص"
-    performer = audio.get("performer") if "performer" in audio else "نامشخص"
-    
-    audio_file_id = audio.get("file_id")
+    title = audio.get("title", "نامشخص")
+    performer = audio.get("performer", "نامشخص")
+    file_id = audio.get("file_id")
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
             "chat_id": GROUP_ID,
-            "audio": audio_file_id,
+            "audio": file_id,
             "message_thread_id": thread_id,
-            "caption": f"{performer} - {title}"
+            "caption": ""  # حذف کپشن
         })
 
         forward_data = forward_response.json()
-
         if forward_data.get("ok"):
             new_message_id = forward_data["result"]["message_id"]
             
-            # ذخیره در دیتابیس
+            # ذخیره آهنگ در دیتابیس
             song_database.append({
-                "title": title,
-                "performer": performer,
                 "message_id": new_message_id,
-                "thread_id": thread_id
+                "thread_id": thread_id,
+                "title": title,
+                "performer": performer
             })
             save_database(song_database)
 
-            # حذف پیام اصلی
             await asyncio.sleep(1)
+
+            # حذف پیام اصلی
             await client.get(f"{BASE_URL}/deleteMessage", params={
                 "chat_id": GROUP_ID,
                 "message_id": message_id
             })
-        else:
-            print(f"⚠️ خطا در فوروارد پیام {message_id}: {forward_data}")
 
 # 📌 **ارسال ۳ آهنگ تصادفی به `11:11` هر شب**
 async def send_random_songs_to_11_11():
