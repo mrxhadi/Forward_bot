@@ -65,31 +65,40 @@ async def send_random_song(chat_id):
         return
 
     songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
+
     async with httpx.AsyncClient() as client:
         for song in songs:
+            # چک کردن اینکه آیا مقدار title و performer در آهنگ وجود دارد
             title = song.get("title", "نامشخص")
             performer = song.get("performer", "نامشخص")
             message_id = song.get("message_id")
 
             if not message_id:
-                print(f"⚠️ خطا: پیام ایدی در آهنگ '{title}' موجود نیست.")
-                continue  # این آهنگ را رد کن
+                print(f"⚠️ خطا: پیام ایدی در آهنگ '{title}' موجود نیست. از دیتابیس حذف شد.")
+                song_database.remove(song)
+                save_database(song_database)
+                continue  # آهنگ بعدی بررسی شود
 
-            response = await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": chat_id,
-                "from_chat_id": GROUP_ID,
-                "message_id": message_id
-            })
-
-            response_data = response.json()
-            if not response_data.get("ok"):
-                print(f"⚠️ خطا در ارسال آهنگ {message_id}: {response_data}")
+            try:
+                response = await client.get(f"{BASE_URL}/copyMessage", params={
+                    "chat_id": chat_id,
+                    "from_chat_id": GROUP_ID,
+                    "message_id": message_id
+                })
                 
-                if response_data.get("error_code") == 400 and "message to copy not found" in response_data.get("description", ""):
-                    song_database.remove(song)
-                    save_database(song_database)
+                response_data = response.json()
+                if not response_data.get("ok"):
+                    print(f"⚠️ خطا در ارسال آهنگ {title}: {response_data}")
 
-            await asyncio.sleep(1)
+                    # حذف از دیتابیس در صورتی که پیام اصلی وجود نداشته باشد
+                    if response_data.get("error_code") == 400 and "message to copy not found" in response_data.get("description", ""):
+                        song_database.remove(song)
+                        save_database(song_database)
+
+            except Exception as e:
+                print(f"⚠️ خطا در ارسال آهنگ تصادفی: {e}")
+
+            await asyncio.sleep(1)  # جلوگیری از بلاک شدن توسط تلگرام
 
 # 📌 **جستجو در دیتابیس**
 async def search_song(chat_id, query):
