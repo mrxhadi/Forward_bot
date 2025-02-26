@@ -133,20 +133,21 @@ async def search_song(chat_id, query):
     # بعد از ارسال همه نتایج
     await send_message(chat_id, "اسمو کپی کن و بفرست تا اهنگو برات بفرستم.")
 
-# 📌 **ارسال آهنگ انتخابی توسط کاربر**
-async def send_selected_song(chat_id, selected_song):
-    try:
-        # ارسال پیام به صورت فوروارد از گروه
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{BASE_URL}/copyMessage", params={
-                "chat_id": chat_id,
-                "from_chat_id": GROUP_ID,
-                "message_id": selected_song["message_id"]
-            })
-            if not response.json().get("ok"):
-                await send_message(chat_id, "⚠️ خطا در ارسال آهنگ!")
-    except Exception as e:
-        await send_message(chat_id, f"⚠️ خطا در ارسال آهنگ: {e}")
+# 📌 ارسال آهنگ انتخابی توسط کاربر
+async def send_selected_song(chat_id, song):
+    async with httpx.AsyncClient() as client:
+        # استفاده از GET برای ارسال پیام
+        response = await client.get(f"{BASE_URL}/copyMessage", params={
+            "chat_id": chat_id,
+            "from_chat_id": GROUP_ID,
+            "message_id": song["message_id"]
+        })
+        
+        response_data = response.json()
+        if response_data.get("ok"):
+            print(f"✅ آهنگ {song['title']} با موفقیت ارسال شد.")
+        else:
+            print(f"⚠️ خطا در ارسال آهنگ {song['title']}: {response_data}")
     
 # 📌 **فوروارد آهنگ‌های جدید بدون کپشن و حذف پیام اصلی**
 async def forward_music_without_caption(message, thread_id):
@@ -178,7 +179,7 @@ async def forward_music_without_caption(message, thread_id):
                 "message_id": message_id
             })
 
-# 📌 **دریافت و پردازش پیام‌های جدید (چک کردن اسم آهنگ ارسال شده توسط کاربر)**
+# 📌 تابع چک کردن پیام‌های جدید
 async def check_new_messages():
     last_update_id = None
     while True:
@@ -195,15 +196,12 @@ async def check_new_messages():
                         text = message.get("text", "").strip()
 
                         if text == "/start":
-                            await send_message(chat_id, " /help از منوی دستورات استفاده کن")
+                            await send_message(chat_id, "/help از منوی دستورات استفاده کن")
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
                         elif text.startswith("/search "):
                             query = text.replace("/search ", "").strip()
                             await search_song(chat_id, query)
-                        elif text in [f"{song['title']} - {song['performer']}" for song in song_database]:
-                            selected_song = next(song for song in song_database if f"{song['title']} - {song['performer']}" == text)
-                            await send_selected_song(chat_id, selected_song)
                         elif text == "/random":
                             await send_random_song(chat_id)
                         elif text == "/list":
@@ -218,7 +216,7 @@ async def check_new_messages():
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
         except Exception as e:
-            print(f"⚠️ خیار: {e}")
+            print(f"⚠️ خطا: {e}")
             await asyncio.sleep(5)
 
         await asyncio.sleep(3)
