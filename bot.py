@@ -86,30 +86,40 @@ async def forward_music_without_caption(message, thread_id):
     title = audio.get("title", "نامشخص")
     performer = audio.get("performer", "نامشخص")
 
+    print(f"📥 پردازش آهنگ جدید: {title} - {performer}, Thread ID: {thread_id}")
+
     # بررسی آیا آهنگ قبلاً در دیتابیس وجود دارد؟
-    existing_song = next((song for song in song_database if song["title"] == title and song["performer"] == performer and song["thread_id"] == thread_id), None)
+    existing_song = next((song for song in song_database if song.get("title") == title and song.get("performer") == performer and song.get("thread_id") == thread_id), None)
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         if existing_song:
-            old_message_id = existing_song["message_id"]
+            old_message_id = existing_song.get("message_id")
 
-            # 🔴 حذف آهنگ قدیمی از گروه (در صورتی که در گروه باشد)
-            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
-                "chat_id": GROUP_ID,
-                "message_id": old_message_id
-            })
-            delete_data = delete_response.json()
+            if old_message_id:
+                print(f"🗑️ تلاش برای حذف آهنگ قدیمی: {title} - {performer}, Message ID: {old_message_id}")
 
-            if delete_data.get("ok"):
-                print(f"🗑️ آهنگ قبلی {title} حذف شد.")
-            else:
-                print(f"⚠️ خطا در حذف آهنگ قبلی {title}: {delete_data}")
+                # 🔴 حذف آهنگ قدیمی از گروه
+                delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
+                    "chat_id": GROUP_ID,
+                    "message_id": old_message_id
+                })
+                delete_data = delete_response.json()
+
+                if delete_data.get("ok"):
+                    print(f"✅ آهنگ قبلی {title} حذف شد از گروه.")
+                else:
+                    print(f"⚠️ خطا در حذف آهنگ قبلی {title}: {delete_data}")
 
             # 🔴 حذف آهنگ قدیمی از دیتابیس
+            print(f"🗑️ حذف آهنگ {title} از دیتابیس.")
             song_database.remove(existing_song)
             save_database(song_database)
 
+        else:
+            print(f"ℹ️ آهنگ {title} قبلاً در دیتابیس وجود نداشت.")
+
         # 🔄 فوروارد آهنگ جدید
+        print(f"📤 فوروارد آهنگ جدید: {title}")
         forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
             "chat_id": GROUP_ID,
             "audio": audio["file_id"],
@@ -129,7 +139,7 @@ async def forward_music_without_caption(message, thread_id):
                 "thread_id": thread_id
             })
             save_database(song_database)
-            print(f"✅ آهنگ جدید {title} ذخیره شد.")
+            print(f"✅ آهنگ جدید {title} ذخیره شد در دیتابیس.")
         else:
             print(f"⚠️ خطا در فوروارد آهنگ جدید {title}: {forward_data}")
             
