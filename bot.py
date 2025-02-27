@@ -81,38 +81,54 @@ async def send_random_song(chat_id):
                 save_database(song_database)
 
 async def forward_music_without_caption(message, thread_id):
-    message_id = message["message_id"]
-    audio = message["audio"]
-    title = audio.get("title", "نامشخص").lower()
-    performer = audio.get("performer", "نامشخص").lower()
+    try:
+        print(f"📥 پردازش پیام جدید - ID: {message.get('message_id')}")
+        if "audio" not in message:
+            print("⚠️ خطا: پیام شامل آهنگ نیست.")
+            return
 
-    existing_song = next((song for song in song_database if song["title"] == title and song["performer"] == performer and song["thread_id"] == thread_id), None)
+        audio = message["audio"]
+        title = audio.get("title", "نامشخص")
+        performer = audio.get("performer", "نامشخص")
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        if existing_song:
-            await client.get(f"{BASE_URL}/deleteMessage", params={
+        print(f"🎵 آهنگ دریافت شد: {title} - {performer}, Thread ID: {thread_id}")
+
+        # بررسی آهنگ تکراری
+        existing_song = next((song for song in song_database if song["title"] == title and song["performer"] == performer and song["thread_id"] == thread_id), None)
+        
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            if existing_song:
+                print(f"🗑 حذف آهنگ تکراری: {existing_song['title']} - {existing_song['performer']}")
+                await client.get(f"{BASE_URL}/deleteMessage", params={
+                    "chat_id": GROUP_ID,
+                    "message_id": existing_song["message_id"]
+                })
+                song_database.remove(existing_song)
+
+            forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
                 "chat_id": GROUP_ID,
-                "message_id": existing_song["message_id"]
+                "audio": audio["file_id"],
+                "message_thread_id": thread_id,
+                "caption": ""
             })
-            song_database.remove(existing_song)
 
-        forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
-            "chat_id": GROUP_ID,
-            "audio": audio["file_id"],
-            "message_thread_id": thread_id,
-            "caption": ""  
-        })
+            forward_data = forward_response.json()
+            print(f"📤 پاسخ تلگرام: {forward_data}")
 
-        forward_data = forward_response.json()
-        if forward_data.get("ok"):
-            new_message_id = forward_data["result"]["message_id"]
-            song_database.append({
-                "title": title,
-                "performer": performer,
-                "message_id": new_message_id,
-                "thread_id": thread_id
-            })
-            save_database(song_database)
+            if forward_data.get("ok"):
+                new_message_id = forward_data["result"]["message_id"]
+                song_database.append({
+                    "title": title,
+                    "performer": performer,
+                    "message_id": new_message_id,
+                    "thread_id": thread_id
+                })
+                save_database(song_database)
+                print("✅ آهنگ جدید ذخیره شد.")
+
+    except Exception as e:
+        import traceback
+        print(f"⚠️ خطای غیرمنتظره در forward_music_without_caption:\n{traceback.format_exc()}")
 
 async def send_random_songs_to_11_11():
     if not song_database:
@@ -181,7 +197,8 @@ async def check_new_messages():
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
         except Exception as e:
-            print(f"⚠️ خطا: {e}")
+            import traceback
+            print(f"⚠️ خطای غیرمنتظره رخ داد:\n{traceback.format_exc()}")
             await asyncio.sleep(5)
 
         await asyncio.sleep(3)
