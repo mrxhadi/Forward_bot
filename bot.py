@@ -10,12 +10,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
 DATABASE_FILE = "songs.json"
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-TIMEOUT = 20  
-RESTART_DELAY = 10  
-RANDOM_SONG_COUNT = 3  
+TIMEOUT = 20
+RESTART_DELAY = 10
+RANDOM_SONG_COUNT = 3
 
 IRAN_TZ = pytz.timezone("Asia/Tehran")
-EXCLUDED_TOPICS_RANDOM = ["G(old)", "gym"]
 TOPIC_11_11_ID = 2463
 
 def load_database():
@@ -36,9 +35,9 @@ async def send_message(chat_id, text):
 
 async def handle_document(document, chat_id):
     file_name = document["file_name"]
-    
+
     if file_name != "songs.json":
-        await send_message(chat_id, "⚠️ لطفاً فایل `songs.json` ارسال کنید.")
+        await send_message(chat_id, "⚠️ لطفاً فایل songs.json ارسال کنید.")
         return
 
     file_id = document["file_id"]
@@ -83,76 +82,36 @@ async def send_random_song(chat_id):
 async def forward_music_without_caption(message, thread_id):
     message_id = message["message_id"]
     audio = message["audio"]
-    title = audio.get("title", "نامشخص")
-    performer = audio.get("performer", "نامشخص")
-
-    print(f"📥 پردازش آهنگ جدید: {title} - {performer}, Thread ID: {thread_id}")
-
-    # بررسی آیا آهنگ قبلاً در دیتابیس وجود دارد؟
-    existing_song = next((song for song in song_database if song.get("title") == title and song.get("performer") == performer and song.get("thread_id") == thread_id), None)
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        if existing_song:
-            old_message_id = existing_song.get("message_id")
-
-            if old_message_id:
-                print(f"🗑️ تلاش برای حذف آهنگ قدیمی: {title} - {performer}, Message ID: {old_message_id}")
-
-                # 🔴 حذف آهنگ قدیمی از گروه
-                delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
-                    "chat_id": GROUP_ID,
-                    "message_id": old_message_id
-                })
-                delete_data = delete_response.json()
-
-                if delete_data.get("ok"):
-                    print(f"✅ آهنگ قبلی {title} حذف شد از گروه.")
-                else:
-                    print(f"⚠️ خطا در حذف آهنگ قبلی {title}: {delete_data}")
-
-            # 🔴 حذف آهنگ قدیمی از دیتابیس
-            print(f"🗑️ حذف آهنگ {title} از دیتابیس.")
-            song_database.remove(existing_song)
-            save_database(song_database)
-
-        else:
-            print(f"ℹ️ آهنگ {title} قبلاً در دیتابیس وجود نداشت.")
-
-        # 🔄 فوروارد آهنگ جدید
-        print(f"📤 فوروارد آهنگ جدید: {title}")
         forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
             "chat_id": GROUP_ID,
             "audio": audio["file_id"],
             "message_thread_id": thread_id,
             "caption": ""
         })
-        forward_data = forward_response.json()
 
+        forward_data = forward_response.json()
         if forward_data.get("ok"):
             new_message_id = forward_data["result"]["message_id"]
-            
-            # 🔄 اضافه کردن آهنگ جدید به دیتابیس
             song_database.append({
-                "title": title,
-                "performer": performer,
                 "message_id": new_message_id,
                 "thread_id": thread_id
             })
             save_database(song_database)
-            print(f"✅ آهنگ جدید {title} ذخیره شد در دیتابیس.")
-        else:
-            print(f"⚠️ خطا در فوروارد آهنگ جدید {title}: {forward_data}")
-            
+
+            await asyncio.sleep(1)
+            await client.get(f"{BASE_URL}/deleteMessage", params={
+                "chat_id": GROUP_ID,
+                "message_id": message_id
+            })
+
 async def send_random_songs_to_11_11():
     if not song_database:
+        print("⚠️ دیتابیس آهنگ‌ها خالی است.")
         return
 
-    filtered_songs = [song for song in song_database if song.get("thread_id") not in EXCLUDED_TOPICS_RANDOM]
-
-    if not filtered_songs:
-        return
-
-    songs = random.sample(filtered_songs, min(RANDOM_SONG_COUNT, len(filtered_songs)))
+    songs = random.sample(song_database, min(RANDOM_SONG_COUNT, len(song_database)))
 
     async with httpx.AsyncClient() as client:
         for song in songs:
@@ -161,26 +120,27 @@ async def send_random_songs_to_11_11():
                     "chat_id": GROUP_ID,
                     "from_chat_id": GROUP_ID,
                     "message_id": song["message_id"],
-                    "message_thread_id": TOPIC_11_11_ID  
+                    "message_thread_id": TOPIC_11_11_ID
                 })
                 response_data = response.json()
 
                 if not response_data.get("ok"):
-                    song_database.remove(song)
-                    save_database(song_database)
+                    print(f"⚠️ خطا در ارسال آهنگ {song['message_id']}: {response_data}")
             except Exception as e:
                 print(f"⚠️ خطا در ارسال آهنگ {song['message_id']}: {e}")
             await asyncio.sleep(1)
-            
+
 async def check_time_for_scheduled_task():
     while True:
         now = datetime.now(IRAN_TZ)
         if now.hour == 23 and now.minute == 11:
+            print("🕚 ارسال آهنگ‌های 11:11 شروع شد...")
             try:
                 await send_random_songs_to_11_11()
+                print("✅ آهنگ‌های 11:11 ارسال شدند.")
             except Exception as e:
-                print(f"⚠️ خطا در اجرای `11:11`: {e}")
-            await asyncio.sleep(70)  
+                print(f"⚠️ خطا در اجرای 11:11: {e}")
+            await asyncio.sleep(70)
         await asyncio.sleep(30)
 
 async def check_new_messages():
@@ -199,19 +159,20 @@ async def check_new_messages():
                         text = message.get("text", "").strip()
 
                         if text == "/start":
-                            await send_message(chat_id, "/random - سه تا آهنگ رندوم بگیر\nآپشن دیگه‌ای هم نداره شوخوش.")
+                            await send_message(chat_id, "/Random - سه تا آهنگ رندوم بگیر\nآپشن دیگه‌ای هم نداره شوخوش.")
+                        elif text == "/help":
+                            await send_message(chat_id, "راهنمایی میخوای چیکار!؟")
                         elif "document" in message:
                             await handle_document(message["document"], chat_id)
                         elif text == "/random":
                             await send_random_song(chat_id)
-                        elif text == "/help":
-                            await send_message(chat_id, "راهنمایی میخوای چیکار؟!")
+                        elif text == "/list":
+                            await send_file_to_user(chat_id)
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
         except Exception as e:
-            import traceback
-            print(f"⚠️ خطای غیرمنتظره رخ داد:\n{traceback.format_exc()}")
+            print(f"⚠️ خطا: {e}")
             await asyncio.sleep(5)
 
         await asyncio.sleep(3)
