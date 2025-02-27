@@ -81,59 +81,58 @@ async def send_random_song(chat_id):
                 save_database(song_database)
 
 async def forward_music_without_caption(message, thread_id):
-    try:
-        print(f"📥 پردازش پیام جدید - ID: {message.get('message_id')}")
-        if "audio" not in message:
-            print("⚠️ خطا: پیام شامل آهنگ نیست.")
-            return
+    message_id = message["message_id"]
+    audio = message["audio"]
+    title = audio.get("title", "نامشخص")
+    performer = audio.get("performer", "نامشخص")
 
-        audio = message["audio"]
-        title = audio.get("title", "نامشخص")
-        performer = audio.get("performer", "نامشخص")
+    # بررسی آیا آهنگ قبلاً در دیتابیس وجود دارد؟
+    existing_song = next((song for song in song_database if song["title"] == title and song["performer"] == performer and song["thread_id"] == thread_id), None)
 
-        print(f"🎵 آهنگ دریافت شد: {title} - {performer}, Thread ID: {thread_id}")
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        if existing_song:
+            old_message_id = existing_song["message_id"]
 
-        # بررسی آهنگ تکراری
-        existing_song = next(
-    (song for song in song_database
-     if song.get("title") == title and song.get("performer") == performer and song.get("thread_id") == thread_id),
-    None
-)
-        
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            if existing_song:
-                print(f"🗑 حذف آهنگ تکراری: {existing_song['title']} - {existing_song['performer']}")
-                await client.get(f"{BASE_URL}/deleteMessage", params={
-                    "chat_id": GROUP_ID,
-                    "message_id": existing_song["message_id"]
-                })
-                song_database.remove(existing_song)
-
-            forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
+            # 🔴 حذف آهنگ قدیمی از گروه (در صورتی که در گروه باشد)
+            delete_response = await client.get(f"{BASE_URL}/deleteMessage", params={
                 "chat_id": GROUP_ID,
-                "audio": audio["file_id"],
-                "message_thread_id": thread_id,
-                "caption": ""
+                "message_id": old_message_id
             })
+            delete_data = delete_response.json()
 
-            forward_data = forward_response.json()
-            print(f"📤 پاسخ تلگرام: {forward_data}")
+            if delete_data.get("ok"):
+                print(f"🗑️ آهنگ قبلی {title} حذف شد.")
+            else:
+                print(f"⚠️ خطا در حذف آهنگ قبلی {title}: {delete_data}")
 
-            if forward_data.get("ok"):
-                new_message_id = forward_data["result"]["message_id"]
-                song_database.append({
-                    "title": title,
-                    "performer": performer,
-                    "message_id": new_message_id,
-                    "thread_id": thread_id
-                })
-                save_database(song_database)
-                print("✅ آهنگ جدید ذخیره شد.")
+            # 🔴 حذف آهنگ قدیمی از دیتابیس
+            song_database.remove(existing_song)
+            save_database(song_database)
 
-    except Exception as e:
-        import traceback
-        print(f"⚠️ خطای غیرمنتظره در forward_music_without_caption:\n{traceback.format_exc()}")
+        # 🔄 فوروارد آهنگ جدید
+        forward_response = await client.get(f"{BASE_URL}/sendAudio", params={
+            "chat_id": GROUP_ID,
+            "audio": audio["file_id"],
+            "message_thread_id": thread_id,
+            "caption": ""
+        })
+        forward_data = forward_response.json()
 
+        if forward_data.get("ok"):
+            new_message_id = forward_data["result"]["message_id"]
+            
+            # 🔄 اضافه کردن آهنگ جدید به دیتابیس
+            song_database.append({
+                "title": title,
+                "performer": performer,
+                "message_id": new_message_id,
+                "thread_id": thread_id
+            })
+            save_database(song_database)
+            print(f"✅ آهنگ جدید {title} ذخیره شد.")
+        else:
+            print(f"⚠️ خطا در فوروارد آهنگ جدید {title}: {forward_data}")
+            
 async def send_random_songs_to_11_11():
     if not song_database:
         return
