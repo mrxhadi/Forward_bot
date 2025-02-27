@@ -94,7 +94,11 @@ async def forward_music_without_caption(message, thread_id):
         print(f"🎵 آهنگ دریافت شد: {title} - {performer}, Thread ID: {thread_id}")
 
         # بررسی آهنگ تکراری
-        existing_song = next((song for song in song_database if song["title"] == title and song["performer"] == performer and song["thread_id"] == thread_id), None)
+        existing_song = next(
+    (song for song in song_database
+     if song.get("title") == title and song.get("performer") == performer and song.get("thread_id") == thread_id),
+    None
+)
         
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             if existing_song:
