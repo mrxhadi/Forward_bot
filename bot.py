@@ -5,6 +5,7 @@ import asyncio
 import httpx
 from datetime import datetime
 import pytz
+from inline_manager import handle_inline_song, send_inline_database
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
@@ -168,6 +169,7 @@ async def check_new_messages():
                             await send_random_song(chat_id)
                         elif text == "/list":
                             await send_file_to_user(chat_id)
+                            await send_inline_database(chat_id)
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
