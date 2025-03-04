@@ -1,12 +1,11 @@
-import os
 import json
+import os
 import httpx
 import asyncio
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-SECOND_CHANNEL_ID = os.getenv("SECOND_CHANNEL_ID")
 INLINE_DATABASE_FILE = "inline_songs.json"
-BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+INLINE_CHANNEL_ID = os.getenv("INLINE_CHANNEL_ID")
+BASE_URL = f"https://api.telegram.org/bot{os.getenv('BOT_TOKEN')}"
 TIMEOUT = 20
 
 def load_inline_database():
@@ -19,39 +18,41 @@ def save_inline_database(data):
     with open(INLINE_DATABASE_FILE, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
 
-inline_database = load_inline_database()
+async def save_inline_song(title, performer, file_id):
+    database = load_inline_database()
+    song = {
+        "title": title,
+        "performer": performer,
+        "file_id": file_id
+    }
+    database.append(song)
+    save_inline_database(database)
 
-async def forward_to_second_channel(audio):
-    file_id = audio["file_id"]
-    title = audio.get("title", "نامشخص")
-    performer = audio.get("performer", "نامشخص")
-
+async def forward_to_inline_channel(file_id, title, performer):
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.get(f"{BASE_URL}/sendAudio", params={
-            "chat_id": SECOND_CHANNEL_ID,
+        await client.get(f"{BASE_URL}/sendAudio", params={
+            "chat_id": INLINE_CHANNEL_ID,
             "audio": file_id,
-            "caption": f"{title} - {performer}"
+            "title": title,
+            "performer": performer
         })
+        await save_inline_song(title, performer, file_id)
+        await asyncio.sleep(1)
 
-        result = response.json()
-        if result.get("ok"):
-            message_id = result["result"]["message_id"]
+async def handle_inline_document(document, chat_id):
+    file_name = document["file_name"]
 
-            inline_database.append({
-                "title": title,
-                "performer": performer,
-                "file_id": file_id,
-                "message_id": message_id
-            })
-            save_inline_database(inline_database)
-            print(f"آهنگ '{title}' به کانال دوم ارسال و ذخیره شد.")
-        else:
-            print(f"خطا در ارسال آهنگ به کانال دوم: {result}")
+    if file_name != "inline_songs.json":
+        return await send_message(chat_id, "⚠️ لطفاً فایل inline_songs.json را ارسال کنید.")
 
-async def send_inline_database(chat_id):
-    if os.path.exists(INLINE_DATABASE_FILE):
-        async with httpx.AsyncClient() as client:
-            with open(INLINE_DATABASE_FILE, "rb") as file:
-                await client.post(f"{BASE_URL}/sendDocument", params={"chat_id": chat_id}, files={"document": file})
-    else:
-        print("دیتابیس اینلاین خالی است.")
+    file_id = document["file_id"]
+    async with httpx.AsyncClient() as client:
+        file_info = await client.get(f"{BASE_URL}/getFile", params={"file_id": file_id})
+        file_path = file_info.json()["result"]["file_path"]
+        file_url = f"https://api.telegram.org/file/bot{os.getenv('BOT_TOKEN')}/{file_path}"
+        response = await client.get(file_url)
+
+        with open(INLINE_DATABASE_FILE, "wb") as file:
+            file.write(response.content)
+
+    await send_message(chat_id, f"✅ دیتابیس اینلاین آپدیت شد! تعداد آهنگ‌ها: {len(load_inline_database())}")
