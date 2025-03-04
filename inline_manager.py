@@ -39,11 +39,15 @@ async def forward_to_inline_channel(file_id, title, performer):
         await save_inline_song(title, performer, file_id)
         await asyncio.sleep(1)
 
-async def handle_inline_document(document, chat_id):
-    file_name = document["file_name"]
-
-    if file_name != "inline_songs.json":
-        return await send_message(chat_id, "⚠️ لطفاً فایل inline_songs.json را ارسال کنید.")
+async def handle_document(document, chat_id):
+    file_name = document.get("file_name", "")
+    if file_name == "songs.json":
+        document_name = "songs"
+    elif file_name == "inline_songs.json":
+        document_name = "inline"
+    else:
+        await send_message(chat_id, "❌ فایل نامعتبر است.")
+        return
 
     file_id = document["file_id"]
     async with httpx.AsyncClient() as client:
