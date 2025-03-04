@@ -5,7 +5,7 @@ import asyncio
 import httpx
 from datetime import datetime
 import pytz
-from inline_manager import handle_inline_document, save_inline_song, load_inline_database, forward_to_inline_channel
+from inline_manager import handle_document, save_inline_song, load_inline_database, forward_to_inline_channel
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
