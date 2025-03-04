@@ -5,7 +5,7 @@ import asyncio
 import httpx
 from datetime import datetime
 import pytz
-from inline_manager import handle_inline_song, send_inline_database
+from inline_manager import handle_inline_document, save_inline_song, load_inline_database, forward_to_inline_channel
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = os.getenv("GROUP_ID")
@@ -100,7 +100,8 @@ async def forward_music_without_caption(message, thread_id):
                 "thread_id": thread_id
             })
             save_database(song_database)
-
+            
+            await forward_to_inline_channel(audio_file_id, audio_title, audio_performer)
             await asyncio.sleep(1)
             await client.get(f"{BASE_URL}/deleteMessage", params={
                 "chat_id": GROUP_ID,
@@ -164,12 +165,16 @@ async def check_new_messages():
                         elif text == "/help":
                             await send_message(chat_id, "راهنمایی میخوای چیکار!؟")
                         elif "document" in message:
+                            document_name = message["document"]["file_name"]
+                        if document_name == "songs.json":
                             await handle_document(message["document"], chat_id)
+                        elif document_name == "inline_songs.json":
+                            await handle_inline_document(message["document"], chat_id)
                         elif text == "/random":
                             await send_random_song(chat_id)
                         elif text == "/list":
-                            await send_file_to_user(chat_id)
-                            await send_inline_database(chat_id)
+                            await send_file_to_user(chat_id, DATABASE_FILE)
+                            await send_file_to_user(chat_id, INLINE_DATABASE_FILE)
                         elif "audio" in message and str(chat_id) == GROUP_ID:
                             await forward_music_without_caption(message, message.get("message_thread_id"))
 
